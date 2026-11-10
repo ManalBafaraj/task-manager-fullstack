@@ -3,9 +3,27 @@ import { countByStatus, filterTasks, TASK_STATUSES, validateTask, type Task } fr
 import { validateRegister } from "@/lib/auth-validation";
 
 const tasks: Task[] = [
-  { _id: "1", title: "Write report", description: "Q4 numbers", status: "pending", createdAt: "2026-01-01" },
-  { _id: "2", title: "Gym", description: "Leg day", status: "in-progress", createdAt: "2026-01-02" },
-  { _id: "3", title: "Read book", description: "Chapter 4 report", status: "completed", createdAt: "2026-01-03" },
+  {
+    _id: "1",
+    title: "Write report",
+    description: "Q4 numbers",
+    status: "pending",
+    createdAt: "2026-01-01",
+  },
+  {
+    _id: "2",
+    title: "Gym",
+    description: "Leg day",
+    status: "in-progress",
+    createdAt: "2026-01-02",
+  },
+  {
+    _id: "3",
+    title: "Read book",
+    description: "Chapter 4 report",
+    status: "completed",
+    createdAt: "2026-01-03",
+  },
 ];
 
 describe("TaskFlow rules", () => {

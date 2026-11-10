@@ -1,27 +1,32 @@
 import { useState, type ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
-import { LayoutDashboard, LogOut, Menu } from "lucide-react";
-import { Sheet, SheetContent, SheetTitle, SheetDescription } from "@/components/ui/sheet";
+import { Bell, CalendarDays, LayoutDashboard, LogOut, Menu } from "lucide-react";
+import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
-import { Logo } from "./Logo";
 import type { User } from "@/lib/api";
+import type { Task } from "@/lib/tasks";
+import { Logo } from "./Logo";
+import { NotificationCenter } from "./NotificationCenter";
 
 function initials(name?: string) {
   if (!name) return "TF";
+
   return name
     .split(" ")
     .filter(Boolean)
     .slice(0, 2)
-    .map((p) => p[0]?.toUpperCase())
+    .map((part) => part[0]?.toUpperCase())
     .join("");
 }
 
 function NavContent({
   user,
+  tasks,
   onLogout,
   onNavigate,
 }: {
   user: User | null;
+  tasks: Task[];
   onLogout: () => void;
   onNavigate?: () => void;
 }) {
@@ -35,14 +40,42 @@ function NavContent({
         <p className="px-3 pb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
           Menu
         </p>
+
         <Link
           to="/dashboard"
           onClick={onNavigate}
           className="flex h-11 items-center gap-3 rounded-xl px-3 text-sm font-medium text-muted-foreground transition-colors duration-200 hover:bg-accent hover:text-accent-foreground"
-          activeProps={{ className: "bg-accent text-accent-foreground", "aria-current": "page" }}
+          activeProps={{
+            className: "bg-accent text-accent-foreground",
+            "aria-current": "page",
+          }}
         >
           <LayoutDashboard className="h-[18px] w-[18px]" aria-hidden="true" />
           Dashboard
+        </Link>
+        <Link
+          to="/calendar"
+          onClick={onNavigate}
+          className="mt-1 flex h-11 items-center gap-3 rounded-xl px-3 text-sm font-medium text-muted-foreground transition-colors duration-200 hover:bg-accent hover:text-accent-foreground"
+          activeProps={{
+            className: "bg-accent text-accent-foreground",
+            "aria-current": "page",
+          }}
+        >
+          <CalendarDays className="h-[18px] w-[18px]" aria-hidden="true" />
+          Calendar
+        </Link>
+        <Link
+          to="/notifications"
+          onClick={onNavigate}
+          className="mt-1 flex h-11 items-center gap-3 rounded-xl px-3 text-sm font-medium text-muted-foreground transition-colors duration-200 hover:bg-accent hover:text-accent-foreground"
+          activeProps={{
+            className: "bg-accent text-accent-foreground",
+            "aria-current": "page",
+          }}
+        >
+          <Bell className="h-[18px] w-[18px]" aria-hidden="true" />
+          Notifications
         </Link>
       </nav>
 
@@ -54,15 +87,18 @@ function NavContent({
           >
             {initials(user?.name)}
           </span>
+
           <div className="min-w-0">
             <p className="truncate text-sm font-semibold text-foreground">
               {user?.name ?? "Guest"}
             </p>
+
             <p className="truncate text-xs text-muted-foreground">
               {user?.email ?? "Preview mode"}
             </p>
           </div>
         </div>
+
         <Button
           variant="ghost-danger"
           className="w-full justify-start px-3 font-medium"
@@ -78,10 +114,12 @@ function NavContent({
 
 export function AppShell({
   user,
+  tasks = [],
   onLogout,
   children,
 }: {
   user: User | null;
+  tasks?: Task[] | undefined;
   onLogout: () => void;
   children: ReactNode;
 }) {
@@ -96,31 +134,37 @@ export function AppShell({
         Skip to content
       </a>
 
-      {/* Desktop sidebar */}
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 border-r bg-sidebar lg:block">
-        <NavContent user={user} onLogout={onLogout} />
+        <NavContent user={user} tasks={tasks} onLogout={onLogout} />
       </aside>
 
-      {/* Mobile top bar */}
       <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b bg-card/85 px-4 backdrop-blur-md lg:hidden">
         <Logo />
-        <Button
-          variant="outline"
-          size="icon"
-          onClick={() => setOpen(true)}
-          aria-label="Open menu"
-          aria-expanded={open}
-        >
-          <Menu />
-        </Button>
+
+        <div className="flex items-center gap-2">
+          <NotificationCenter tasks={tasks} userKey={user?.email ?? "guest"} />
+
+          <Button
+            variant="outline"
+            size="icon"
+            onClick={() => setOpen(true)}
+            aria-label="Open menu"
+            aria-expanded={open}
+          >
+            <Menu />
+          </Button>
+        </div>
       </header>
 
       <Sheet open={open} onOpenChange={setOpen}>
         <SheetContent side="left" className="w-[85%] max-w-xs bg-sidebar p-0">
           <SheetTitle className="sr-only">Navigation</SheetTitle>
+
           <SheetDescription className="sr-only">Main navigation and account</SheetDescription>
+
           <NavContent
             user={user}
+            tasks={tasks}
             onNavigate={() => setOpen(false)}
             onLogout={() => {
               setOpen(false);

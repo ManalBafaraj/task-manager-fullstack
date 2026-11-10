@@ -129,15 +129,13 @@
   /* Elevation */
   --shadow-soft: 0 1px 2px oklch(0.278 0.03 256.8 / 4%), 0 2px 8px oklch(0.278 0.03 256.8 / 4%);
   --shadow-card: 0 1px 3px oklch(0.278 0.03 256.8 / 5%), 0 8px 24px -12px oklch(0.4 0.1 283 / 14%);
-  --shadow-lift: 0 4px 10px oklch(0.278 0.03 256.8 / 6%), 0 18px 36px -16px oklch(0.45 0.15 283 / 26%);
+  --shadow-lift:
+    0 4px 10px oklch(0.278 0.03 256.8 / 6%), 0 18px 36px -16px oklch(0.45 0.15 283 / 26%);
   --shadow-glow: 0 10px 24px -10px oklch(0.568 0.202 283.1 / 55%);
 
   --gradient-primary: linear-gradient(135deg, var(--primary), var(--primary-dark));
-  --gradient-auth: radial-gradient(
-      120% 80% at 0% 0%,
-      oklch(0.62 0.2 290 / 100%) 0%,
-      transparent 60%
-    ),
+  --gradient-auth:
+    radial-gradient(120% 80% at 0% 0%, oklch(0.62 0.2 290 / 100%) 0%, transparent 60%),
     radial-gradient(90% 70% at 100% 100%, oklch(0.45 0.2 275) 0%, transparent 60%),
     var(--primary-dark);
 

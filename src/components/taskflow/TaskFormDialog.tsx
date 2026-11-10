@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import * as RadioGroup from "@radix-ui/react-radio-group";
-import { Loader2, Plus, Pencil } from "lucide-react";
+import { Bell, ListChecks, Loader2, Pencil, Plus, Trash2 } from "lucide-react";
+
 import {
   Dialog,
   DialogContent,
@@ -10,23 +11,44 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+
 import {
   DESCRIPTION_MAX,
+  PRIORITY_LABELS,
+  REMINDER_LABELS,
+  REMINDER_TYPES,
   STATUS_LABELS,
+  TASK_CATEGORIES,
+  TASK_PRIORITIES,
   TASK_STATUSES,
   TITLE_MAX,
   validateTask,
+  type ReminderType,
   type Task,
+  type TaskCategory,
   type TaskErrors,
   type TaskInput,
+  type TaskPriority,
   type TaskStatus,
 } from "@/lib/tasks";
 import { cn } from "@/lib/utils";
 import { Field, FieldError, FormAlert } from "./FormField";
 import { StatusDot } from "./StatusBadge";
 
-const EMPTY: TaskInput = { title: "", description: "", status: "pending" };
+const EMPTY: TaskInput = {
+  title: "",
+  description: "",
+  checklist: [],
+  status: "pending",
+  priority: "medium",
+  category: "General",
+  dueDate: null,
+  reminderEnabled: false,
+  reminderType: "before-due",
+  reminderTime: "09:00",
+};
 
 export function TaskFormDialog({
   open,
@@ -36,57 +58,139 @@ export function TaskFormDialog({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** When provided, the dialog is in edit mode and pre-filled. */
-  task?: Task | null;
+  task?: Task | null | undefined;
   onSubmit: (input: TaskInput) => Promise<void>;
 }) {
   const isEdit = Boolean(task);
+
   const [values, setValues] = useState<TaskInput>(EMPTY);
+
   const [errors, setErrors] = useState<TaskErrors>({});
+
   const [formError, setFormError] = useState<string | null>(null);
+
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    if (open) {
-      setValues(
-        task ? { title: task.title, description: task.description, status: task.status } : EMPTY,
-      );
-      setErrors({});
-      setFormError(null);
-      setSubmitting(false);
-    }
+    if (!open) return;
+
+    setValues(
+      task
+        ? {
+            title: task.title,
+            description: task.description,
+            checklist: (task.checklist ?? []).map((item) => ({
+              _id: item._id,
+              text: item.text,
+              completed: item.completed,
+            })),
+            status: task.status,
+            priority: task.priority ?? "medium",
+            category: task.category ?? "General",
+            dueDate: task.dueDate ? task.dueDate.slice(0, 10) : null,
+            reminderEnabled: task.reminderEnabled ?? false,
+            reminderType: task.reminderType ?? "before-due",
+            reminderTime: task.reminderTime ?? "09:00",
+          }
+        : EMPTY,
+    );
+
+    setErrors({});
+    setFormError(null);
+    setSubmitting(false);
   }, [open, task]);
 
-  const set = <K extends keyof TaskInput>(key: K, value: TaskInput[K]) => {
-    setValues((v) => ({ ...v, [key]: value }));
-    if (errors[key]) setErrors((e) => ({ ...e, [key]: undefined }));
+  const set = <Key extends keyof TaskInput>(key: Key, value: TaskInput[Key]) => {
+    setValues((current) => ({
+      ...current,
+      [key]: value,
+    }));
+
+    if (errors[key]) {
+      setErrors((current) => ({
+        ...current,
+        [key]: undefined,
+      }));
+    }
   };
 
-  const handleSubmit = async (e: FormEvent) => {
-    e.preventDefault();
-    const next = validateTask(values);
-    setErrors(next);
-    if (Object.keys(next).length) {
+  const addChecklistItem = () => {
+    if (values.checklist.length >= 20) return;
+
+    set("checklist", [
+      ...values.checklist,
+      {
+        text: "",
+        completed: false,
+      },
+    ]);
+  };
+
+  const updateChecklistItem = (index: number, text: string) => {
+    set(
+      "checklist",
+      values.checklist.map((item, itemIndex) => (itemIndex === index ? { ...item, text } : item)),
+    );
+  };
+
+  const toggleChecklistItem = (index: number) => {
+    set(
+      "checklist",
+      values.checklist.map((item, itemIndex) =>
+        itemIndex === index
+          ? {
+              ...item,
+              completed: !item.completed,
+            }
+          : item,
+      ),
+    );
+  };
+
+  const removeChecklistItem = (index: number) => {
+    set(
+      "checklist",
+      values.checklist.filter((_, itemIndex) => itemIndex !== index),
+    );
+  };
+  const handleSubmit = async (event: FormEvent) => {
+    event.preventDefault();
+
+    const nextErrors = validateTask(values);
+    setErrors(nextErrors);
+
+    if (Object.keys(nextErrors).length > 0) {
       setFormError("Please fix the highlighted fields.");
       return;
     }
+
     setFormError(null);
     setSubmitting(true);
+
     try {
       await onSubmit(values);
       onOpenChange(false);
-    } catch (err) {
-      setFormError(err instanceof Error ? err.message : "Something went wrong. Please try again.");
+    } catch (error) {
+      setFormError(
+        error instanceof Error ? error.message : "Something went wrong. Please try again.",
+      );
     } finally {
       setSubmitting(false);
     }
   };
 
   return (
-    <Dialog open={open} onOpenChange={(o) => !submitting && onOpenChange(o)}>
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (!submitting) {
+          onOpenChange(nextOpen);
+        }
+      }}
+    >
       <DialogContent
         className={cn(
-          "flex flex-col gap-0 overflow-hidden border-0 bg-card p-0 shadow-lift sm:max-w-[520px] sm:rounded-3xl",
+          "flex max-h-[92vh] flex-col gap-0 overflow-hidden border-0 bg-card p-0 shadow-lift sm:max-w-[560px] sm:rounded-3xl",
           "max-sm:inset-3 max-sm:w-auto max-sm:max-w-none max-sm:translate-x-0 max-sm:translate-y-0 max-sm:rounded-3xl",
         )}
       >
@@ -97,9 +201,11 @@ export function TaskFormDialog({
           >
             {isEdit ? <Pencil className="h-5 w-5" /> : <Plus className="h-5 w-5" />}
           </span>
+
           <DialogTitle className="text-xl font-bold tracking-tight">
             {isEdit ? "Edit task" : "Add new task"}
           </DialogTitle>
+
           <DialogDescription className="mt-1.5">
             {isEdit
               ? "Update the details of your task below."
@@ -121,14 +227,14 @@ export function TaskFormDialog({
                 </span>
               }
             >
-              {(p) => (
+              {(fieldProps) => (
                 <Input
-                  {...p}
+                  {...fieldProps}
                   autoFocus
                   maxLength={TITLE_MAX}
                   placeholder="e.g. Prepare weekly report"
                   value={values.title}
-                  onChange={(e) => set("title", e.target.value)}
+                  onChange={(event) => set("title", event.target.value)}
                 />
               )}
             </Field>
@@ -143,40 +249,253 @@ export function TaskFormDialog({
                 </span>
               }
             >
-              {(p) => (
+              {(fieldProps) => (
                 <Textarea
-                  {...p}
+                  {...fieldProps}
                   maxLength={DESCRIPTION_MAX}
                   placeholder="Add a few details (optional)"
                   value={values.description}
-                  onChange={(e) => set("description", e.target.value)}
+                  onChange={(event) => set("description", event.target.value)}
                 />
               )}
             </Field>
+            <div className="rounded-2xl border bg-muted/30 p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <span className="grid h-9 w-9 place-items-center rounded-xl bg-primary-soft text-primary">
+                    <ListChecks className="h-4 w-4" />
+                  </span>
 
+                  <div>
+                    <p className="text-sm font-semibold text-foreground">Checklist</p>
+                    <p className="text-xs text-muted-foreground">
+                      {values.checklist.length}/20 items
+                    </p>
+                  </div>
+                </div>
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={addChecklistItem}
+                  disabled={values.checklist.length >= 20}
+                >
+                  <Plus className="h-4 w-4" />
+                  Add item
+                </Button>
+              </div>
+
+              {values.checklist.length === 0 ? (
+                <p className="mt-4 rounded-xl border border-dashed px-4 py-5 text-center text-xs text-muted-foreground">
+                  Break this task into smaller steps.
+                </p>
+              ) : (
+                <div className="mt-4 space-y-2">
+                  {values.checklist.map((item, index) => (
+                    <div key={item._id ?? index} className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => toggleChecklistItem(index)}
+                        className={cn(
+                          "grid h-10 w-10 shrink-0 place-items-center rounded-xl border transition-colors",
+                          item.completed
+                            ? "border-primary bg-primary text-primary-foreground"
+                            : "border-input bg-card text-muted-foreground hover:border-primary/40",
+                        )}
+                        aria-label={
+                          item.completed
+                            ? "Mark checklist item incomplete"
+                            : "Mark checklist item complete"
+                        }
+                      >
+                        {item.completed ? "✓" : index + 1}
+                      </button>
+
+                      <Input
+                        maxLength={120}
+                        placeholder={`Checklist item ${index + 1}`}
+                        value={item.text}
+                        onChange={(event) => updateChecklistItem(index, event.target.value)}
+                        className={cn(item.completed && "line-through opacity-65")}
+                      />
+
+                      <Button
+                        type="button"
+                        variant="ghost-danger"
+                        size="icon-sm"
+                        onClick={() => removeChecklistItem(index)}
+                        aria-label={`Remove checklist item ${index + 1}`}
+                      >
+                        <Trash2 />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <FieldError id="task-checklist-error" message={errors.checklist} />
+            </div>
             <div>
               <p id="task-status-label" className="mb-2 text-sm font-medium text-foreground">
                 Status
               </p>
+
               <RadioGroup.Root
                 aria-labelledby="task-status-label"
-                aria-describedby={errors.status ? "task-status-error" : undefined}
                 value={values.status}
-                onValueChange={(v) => set("status", v as TaskStatus)}
+                onValueChange={(value) => set("status", value as TaskStatus)}
                 className="grid grid-cols-1 gap-2 sm:grid-cols-3"
               >
-                {TASK_STATUSES.map((s) => (
+                {TASK_STATUSES.map((status) => (
                   <RadioGroup.Item
-                    key={s}
-                    value={s}
-                    className="flex h-12 cursor-pointer items-center gap-2.5 rounded-xl border border-input bg-card px-4 text-sm font-medium text-muted-foreground shadow-soft transition-all duration-200 hover:border-primary/40 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/15 data-[state=checked]:border-primary data-[state=checked]:bg-primary-soft data-[state=checked]:text-foreground"
+                    key={status}
+                    value={status}
+                    className="flex h-12 cursor-pointer items-center gap-2.5 rounded-xl border border-input bg-card px-4 text-sm font-medium text-muted-foreground shadow-soft transition-all hover:border-primary/40 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/15 data-[state=checked]:border-primary data-[state=checked]:bg-primary-soft data-[state=checked]:text-foreground"
                   >
-                    <StatusDot status={s} className="h-2 w-2" />
-                    {STATUS_LABELS[s]}
+                    <StatusDot status={status} className="h-2 w-2" />
+                    {STATUS_LABELS[status]}
                   </RadioGroup.Item>
                 ))}
               </RadioGroup.Root>
+
               <FieldError id="task-status-error" message={errors.status} />
+            </div>
+
+            <div>
+              <p id="task-priority-label" className="mb-2 text-sm font-medium text-foreground">
+                Priority
+              </p>
+
+              <RadioGroup.Root
+                aria-labelledby="task-priority-label"
+                value={values.priority}
+                onValueChange={(value) => set("priority", value as TaskPriority)}
+                className="grid grid-cols-1 gap-2 sm:grid-cols-3"
+              >
+                {TASK_PRIORITIES.map((priority) => (
+                  <RadioGroup.Item
+                    key={priority}
+                    value={priority}
+                    className="flex h-12 cursor-pointer items-center justify-center gap-2.5 rounded-xl border border-input bg-card px-4 text-sm font-medium text-muted-foreground shadow-soft transition-all hover:border-primary/40 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/15 data-[state=checked]:border-primary data-[state=checked]:bg-primary-soft data-[state=checked]:text-foreground"
+                  >
+                    <span
+                      className={cn(
+                        "h-2 w-2 rounded-full",
+                        priority === "low" && "bg-emerald-500",
+                        priority === "medium" && "bg-amber-500",
+                        priority === "high" && "bg-rose-500",
+                      )}
+                    />
+                    {PRIORITY_LABELS[priority]}
+                  </RadioGroup.Item>
+                ))}
+              </RadioGroup.Root>
+
+              <FieldError id="task-priority-error" message={errors.priority} />
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field id="task-category" label="Category" error={errors.category}>
+                {(fieldProps) => (
+                  <select
+                    {...fieldProps}
+                    value={values.category}
+                    onChange={(event) => set("category", event.target.value as TaskCategory)}
+                    className="flex h-12 w-full rounded-xl border border-input bg-card px-4 text-sm text-foreground shadow-soft outline-none transition-colors focus:border-primary focus:ring-4 focus:ring-primary/10"
+                  >
+                    {TASK_CATEGORIES.map((category) => (
+                      <option key={category} value={category}>
+                        {category}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </Field>
+
+              <Field id="task-due-date" label="Due date" error={errors.dueDate}>
+                {(fieldProps) => (
+                  <Input
+                    {...fieldProps}
+                    type="date"
+                    value={values.dueDate ?? ""}
+                    onChange={(event) => set("dueDate", event.target.value || null)}
+                  />
+                )}
+              </Field>
+            </div>
+
+            <div className="rounded-2xl border bg-muted/30 p-4">
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex items-start gap-3">
+                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-primary-soft text-primary">
+                    <Bell className="h-4 w-4" />
+                  </span>
+
+                  <div>
+                    <p className="text-sm font-semibold text-foreground">Enable reminder</p>
+
+                    <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+                      Get notified about this task.
+                    </p>
+                  </div>
+                </div>
+
+                <Switch
+                  checked={values.reminderEnabled}
+                  onCheckedChange={(checked) => set("reminderEnabled", checked)}
+                  aria-label="Enable reminder"
+                />
+              </div>
+
+              {values.reminderEnabled && (
+                <div className="mt-5 space-y-4 border-t pt-4">
+                  <div>
+                    <p
+                      id="reminder-type-label"
+                      className="mb-2 text-sm font-medium text-foreground"
+                    >
+                      Reminder type
+                    </p>
+
+                    <RadioGroup.Root
+                      aria-labelledby="reminder-type-label"
+                      value={values.reminderType}
+                      onValueChange={(value) => set("reminderType", value as ReminderType)}
+                      className="grid gap-2 sm:grid-cols-2"
+                    >
+                      {REMINDER_TYPES.map((reminderType) => (
+                        <RadioGroup.Item
+                          key={reminderType}
+                          value={reminderType}
+                          className="flex min-h-12 cursor-pointer items-center rounded-xl border border-input bg-card px-4 text-left text-sm font-medium text-muted-foreground shadow-soft transition-all hover:border-primary/40 data-[state=checked]:border-primary data-[state=checked]:bg-primary-soft data-[state=checked]:text-foreground"
+                        >
+                          {REMINDER_LABELS[reminderType]}
+                        </RadioGroup.Item>
+                      ))}
+                    </RadioGroup.Root>
+
+                    <FieldError id="reminder-type-error" message={errors.reminderType} />
+
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      {values.reminderType === "daily"
+                        ? "A new reminder appears every day until the task is completed."
+                        : "We will notify you when the deadline is approaching."}
+                    </p>
+                  </div>
+
+                  <Field id="task-reminder-time" label="Reminder time" error={errors.reminderTime}>
+                    {(fieldProps) => (
+                      <Input
+                        {...fieldProps}
+                        type="time"
+                        value={values.reminderTime}
+                        onChange={(event) => set("reminderTime", event.target.value)}
+                      />
+                    )}
+                  </Field>
+                </div>
+              )}
             </div>
           </div>
 
@@ -189,12 +508,14 @@ export function TaskFormDialog({
             >
               Cancel
             </Button>
+
             <Button type="submit" disabled={submitting} className="sm:min-w-[140px]">
               {submitting && <Loader2 className="animate-spin" />}
+
               {submitting
                 ? isEdit
-                  ? "Saving…"
-                  : "Creating…"
+                  ? "Saving..."
+                  : "Creating..."
                 : isEdit
                   ? "Save Changes"
                   : "Create Task"}

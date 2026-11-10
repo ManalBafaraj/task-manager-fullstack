@@ -16,7 +16,12 @@ const iconWrap = cva("grid h-11 w-11 place-items-center rounded-xl", {
 
 type Tone = "all" | "pending" | "progress" | "completed";
 
-const CARDS: { key: "all" | "pending" | "in-progress" | "completed"; label: string; icon: LucideIcon; tone: Tone }[] = [
+const CARDS: {
+  key: "all" | "pending" | "in-progress" | "completed";
+  label: string;
+  icon: LucideIcon;
+  tone: Tone;
+}[] = [
   { key: "all", label: "All Tasks", icon: ListTodo, tone: "all" },
   { key: "pending", label: "Pending", icon: Clock3, tone: "pending" },
   { key: "in-progress", label: "In Progress", icon: Loader, tone: "progress" },
