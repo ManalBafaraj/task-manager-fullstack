@@ -1,4 +1,5 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useAccount } from "@/hooks/use-account";
 import * as RadioGroup from "@radix-ui/react-radio-group";
 import { Bell, ListChecks, Loader2, Pencil, Plus, Trash2 } from "lucide-react";
 
@@ -13,6 +14,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 import {
   DESCRIPTION_MAX,
@@ -36,6 +44,7 @@ import {
 import { cn } from "@/lib/utils";
 import { Field, FieldError, FormAlert } from "./FormField";
 import { StatusDot } from "./StatusBadge";
+import { TimeWheelPicker } from "./TimeWheelPicker";
 
 const EMPTY: TaskInput = {
   title: "",
@@ -54,14 +63,21 @@ export function TaskFormDialog({
   open,
   onOpenChange,
   task,
+  initialDueDate,
   onSubmit,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   task?: Task | null | undefined;
+  initialDueDate?: string | undefined;
   onSubmit: (input: TaskInput) => Promise<void>;
 }) {
   const isEdit = Boolean(task);
+  const { preferences } = useAccount();
+  const defaultTime = useRef(preferences.defaultReminderTime);
+  useEffect(() => {
+    defaultTime.current = preferences.defaultReminderTime;
+  }, [preferences.defaultReminderTime]);
 
   const [values, setValues] = useState<TaskInput>(EMPTY);
 
@@ -92,13 +108,13 @@ export function TaskFormDialog({
             reminderType: task.reminderType ?? "before-due",
             reminderTime: task.reminderTime ?? "09:00",
           }
-        : EMPTY,
+        : { ...EMPTY, dueDate: initialDueDate ?? null, reminderTime: defaultTime.current },
     );
 
     setErrors({});
     setFormError(null);
     setSubmitting(false);
-  }, [open, task]);
+  }, [open, task, initialDueDate]);
 
   const set = <Key extends keyof TaskInput>(key: Key, value: TaskInput[Key]) => {
     setValues((current) => ({
@@ -360,6 +376,17 @@ export function TaskFormDialog({
               </RadioGroup.Root>
 
               <FieldError id="task-status-error" message={errors.status} />
+              {task?.status === "completed" && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="mt-3"
+                  disabled={submitting}
+                  onClick={() => set("status", "pending")}
+                >
+                  Reopen task
+                </Button>
+              )}
             </div>
 
             <div>
@@ -398,18 +425,21 @@ export function TaskFormDialog({
             <div className="grid gap-4 sm:grid-cols-2">
               <Field id="task-category" label="Category" error={errors.category}>
                 {(fieldProps) => (
-                  <select
-                    {...fieldProps}
+                  <Select
                     value={values.category}
-                    onChange={(event) => set("category", event.target.value as TaskCategory)}
-                    className="flex h-12 w-full rounded-xl border border-input bg-card px-4 text-sm text-foreground shadow-soft outline-none transition-colors focus:border-primary focus:ring-4 focus:ring-primary/10"
+                    onValueChange={(value) => set("category", value as TaskCategory)}
                   >
-                    {TASK_CATEGORIES.map((category) => (
-                      <option key={category} value={category}>
-                        {category}
-                      </option>
-                    ))}
-                  </select>
+                    <SelectTrigger {...fieldProps}>
+                      <SelectValue placeholder="Choose a category" />
+                    </SelectTrigger>
+                    <SelectContent position="popper" align="start" sideOffset={6}>
+                      {TASK_CATEGORIES.map((category) => (
+                        <SelectItem key={category} value={category}>
+                          {category}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 )}
               </Field>
 
@@ -486,11 +516,10 @@ export function TaskFormDialog({
 
                   <Field id="task-reminder-time" label="Reminder time" error={errors.reminderTime}>
                     {(fieldProps) => (
-                      <Input
+                      <TimeWheelPicker
                         {...fieldProps}
-                        type="time"
                         value={values.reminderTime}
-                        onChange={(event) => set("reminderTime", event.target.value)}
+                        onChange={(time) => set("reminderTime", time)}
                       />
                     )}
                   </Field>

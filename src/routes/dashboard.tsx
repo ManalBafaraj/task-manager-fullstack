@@ -1,12 +1,19 @@
+import { useAccount } from "@/hooks/use-account";
+import { useTaskActions } from "@/hooks/use-task-actions";
+import { dashboardPhrase } from "@/lib/dashboard-copy";
+import { dateKey } from "@/lib/planning";
+import { requireSession } from "@/lib/auth-guard";
 import { useEffect, useMemo, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus } from "lucide-react";
+import { CalendarDays, Plus } from "lucide-react";
 import { toast } from "sonner";
 
 import { AppShell } from "@/components/taskflow/AppShell";
 import { DeleteTaskDialog } from "@/components/taskflow/DeleteTaskDialog";
 import { SummaryCards } from "@/components/taskflow/SummaryCards";
+import { NextMove } from "@/components/taskflow/NextMove";
+import { useFocusSession } from "@/hooks/use-focus-session";
 import { TaskCard, TaskCardSkeleton, TaskGrid } from "@/components/taskflow/TaskCard";
 import { TaskFormDialog } from "@/components/taskflow/TaskFormDialog";
 import { EmptyState, ErrorState, NoResultsState } from "@/components/taskflow/TaskStates";
@@ -29,6 +36,7 @@ import {
 } from "@/lib/tasks";
 
 export const Route = createFileRoute("/dashboard")({
+  beforeLoad: requireSession,
   head: () => ({
     meta: [
       {
@@ -110,7 +118,9 @@ function DashboardPage() {
   const queryClient = useQueryClient();
   const queryKey = ["tasks"] as const;
 
-  const [user, setUser] = useState<User | null>(null);
+  const { user } = useAccount();
+  const updateTask = useTaskActions();
+  const [localDate, setLocalDate] = useState("");
   const [greeting, setGreeting] = useState("Hello");
   const [today, setToday] = useState("");
 
@@ -123,11 +133,11 @@ function DashboardPage() {
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<Task | null>(null);
   const [deleting, setDeleting] = useState<Task | null>(null);
+  const { startFocus, chooseTask } = useFocusSession();
 
   useEffect(() => {
-    setUser(session.getUser());
-
     const now = new Date();
+    setLocalDate(dateKey(now));
 
     setGreeting(greetingFor(now));
 
@@ -143,6 +153,7 @@ function DashboardPage() {
   const tasksQuery = useQuery({
     queryKey,
     queryFn: () => tasksApi.list(),
+    enabled: Boolean(user),
     retry: false,
   });
 
@@ -184,13 +195,18 @@ function DashboardPage() {
   const handleSubmit = async (input: TaskInput) => {
     try {
       if (editing) {
-        const updated = await tasksApi.update(editing._id, input);
+        const updated = await updateTask(editing, input);
 
         setTasks((previous) => previous.map((task) => (task._id === updated._id ? updated : task)));
 
-        toast.success("Task updated", {
-          description: "Your changes have been saved.",
-        });
+        if (
+          editing.status === input.status ||
+          (input.status !== "completed" &&
+            !(editing.status === "completed" && input.status === "pending"))
+        )
+          toast.success("Task updated", {
+            description: "Your changes have been saved.",
+          });
       } else {
         const created = await tasksApi.create(input);
 
@@ -219,18 +235,7 @@ function DashboardPage() {
     );
 
     try {
-      const updated = await tasksApi.update(task._id, {
-        title: task.title,
-        description: task.description,
-        status: task.status,
-        priority: task.priority,
-        category: task.category,
-        dueDate: task.dueDate,
-        reminderEnabled: task.reminderEnabled,
-        reminderType: task.reminderType,
-        reminderTime: task.reminderTime,
-        checklist,
-      });
+      const updated = await updateTask(task, { checklist });
 
       setTasks((previous) => previous.map((item) => (item._id === updated._id ? updated : item)));
     } catch (error) {
@@ -261,13 +266,15 @@ function DashboardPage() {
     tasksQuery.refetch();
   };
 
+  const handleQuickUpdate = updateTask;
+
   const handleLogout = () => {
     authApi.logout();
 
     toast.success("You have been logged out");
 
     navigate({
-      to: "/login",
+      to: "/",
     });
   };
 
@@ -281,45 +288,57 @@ function DashboardPage() {
 
   const firstName = user?.name.split(" ")[0];
 
-  const inProgress = counts["in-progress"];
+  const contextCopy = dashboardPhrase(counts, user?.id ?? "guest", localDate);
 
   return (
     <AppShell user={user} tasks={tasks} onLogout={handleLogout}>
-      <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+      <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-sm font-medium text-muted-foreground">{today || "\u00A0"}</p>
+          <p className="flex items-center gap-2 text-xs font-medium tracking-wide text-muted-foreground">
+            <CalendarDays className="h-3.5 w-3.5" aria-hidden="true" />
+            <time dateTime={localDate}>{today || "\u00A0"}</time>
+          </p>
 
           <h1 className="mt-1 text-2xl font-bold tracking-tight text-foreground sm:text-[32px]">
             {greeting}
-            {firstName ? `, ${firstName}` : ""}
+            {firstName && (
+              <>
+                ,{" "}
+                <span className="text-primary" dir="auto">
+                  {firstName}
+                </span>
+              </>
+            )}
           </h1>
 
           {isLoading ? (
             <Skeleton className="mt-2 h-5 w-56 rounded-md" />
           ) : (
             <p className="mt-1.5 text-[15px] text-muted-foreground">
-              {isError
-                ? "Let us get your tasks back on screen."
-                : tasks.length === 0
-                  ? "A fresh start - what would you like to accomplish?"
-                  : `You have ${inProgress} ${inProgress === 1 ? "task" : "tasks"} in progress.`}
+              {isError ? "Let us get your tasks back on screen." : contextCopy}
             </p>
           )}
         </div>
 
-        <Button size="lg" onClick={openCreate} className="w-full sm:w-auto">
+        <Button size="lg" onClick={openCreate} className="h-[54px] w-full sm:h-12 sm:w-auto">
           <Plus />
           Add Task
         </Button>
       </header>
 
-      <div className="mt-8">
-        {isError && <SummaryCards loading />}
+      <div className="mt-6">{!isError && <SummaryCards counts={counts} loading={isLoading} />}</div>
 
-        {!isError && <SummaryCards counts={counts} loading={isLoading} />}
-      </div>
+      {!isLoading && !isError && (
+        <NextMove
+          tasks={tasks}
+          onOpen={openEdit}
+          onFocus={startFocus}
+          onChooseFocus={chooseTask}
+          onUpdate={(task, changes) => handleQuickUpdate(task, changes).then(() => {})}
+        />
+      )}
 
-      <section aria-labelledby="tasks-heading" className="mt-10">
+      <section aria-labelledby="tasks-heading" className="mt-8">
         <div className="mb-4 flex items-baseline justify-between">
           <h2 id="tasks-heading" className="text-lg font-bold tracking-tight text-foreground">
             My tasks
@@ -376,6 +395,8 @@ function DashboardPage() {
                   task={task}
                   onEdit={openEdit}
                   onDelete={setDeleting}
+                  onFocus={startFocus}
+                  onStatusChange={(task, status) => updateTask(task, { status }).then(() => {})}
                   onToggleChecklist={handleToggleChecklist}
                 />
               ))}

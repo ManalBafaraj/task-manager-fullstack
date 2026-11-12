@@ -14,37 +14,11 @@ function StateFrame({
   action?: ReactNode;
 }) {
   return (
-    <div className="card-surface flex flex-col items-center px-6 py-14 text-center animate-fade-up sm:py-20">
+    <div className="flex flex-col items-center rounded-xl border bg-card px-5 py-8 text-center animate-fade-up">
       {art}
       <h3 className="mt-6 text-lg font-semibold text-foreground">{title}</h3>
       <p className="mt-2 max-w-sm text-sm leading-relaxed text-muted-foreground">{body}</p>
       {action && <div className="mt-7">{action}</div>}
-    </div>
-  );
-}
-
-function EmptyIllustration() {
-  return (
-    <div className="relative h-32 w-40" aria-hidden="true">
-      <div className="absolute inset-x-4 bottom-0 h-4 rounded-full bg-primary-soft blur-md" />
-      <div className="absolute left-3 top-6 h-20 w-28 -rotate-6 rounded-2xl border bg-card shadow-card" />
-      <div className="absolute left-9 top-2 flex h-24 w-28 rotate-3 flex-col gap-2.5 rounded-2xl border bg-card p-4 shadow-lift">
-        <div className="flex items-center gap-2">
-          <span className="h-3.5 w-3.5 rounded-md border-2 border-primary/50" />
-          <span className="h-2 w-14 rounded-full bg-muted" />
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="h-3.5 w-3.5 rounded-md border-2 border-primary/30" />
-          <span className="h-2 w-10 rounded-full bg-muted" />
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="h-3.5 w-3.5 rounded-md bg-primary" />
-          <span className="h-2 w-12 rounded-full bg-primary-soft" />
-        </div>
-      </div>
-      <span className="absolute -right-1 top-0 grid h-9 w-9 place-items-center rounded-full bg-gradient-primary text-primary-foreground shadow-glow">
-        <Plus className="h-4 w-4" />
-      </span>
     </div>
   );
 }
@@ -55,8 +29,8 @@ function IconArt({ children, tone }: { children: ReactNode; tone: "muted" | "dan
       aria-hidden="true"
       className={
         tone === "danger"
-          ? "grid h-20 w-20 place-items-center rounded-3xl bg-destructive-soft text-destructive"
-          : "grid h-20 w-20 place-items-center rounded-3xl bg-primary-soft text-primary"
+          ? "grid h-12 w-12 place-items-center rounded-xl bg-destructive-soft text-destructive"
+          : "grid h-12 w-12 place-items-center rounded-xl bg-primary-soft text-primary"
       }
     >
       {children}
@@ -67,7 +41,11 @@ function IconArt({ children, tone }: { children: ReactNode; tone: "muted" | "dan
 export function EmptyState({ onCreate }: { onCreate: () => void }) {
   return (
     <StateFrame
-      art={<EmptyIllustration />}
+      art={
+        <IconArt tone="muted">
+          <Plus className="h-5 w-5" />
+        </IconArt>
+      }
       title="No tasks yet"
       body="Your list is wonderfully clear. Add your first task and start making progress."
       action={

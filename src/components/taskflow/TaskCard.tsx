@@ -11,6 +11,7 @@ import {
   Loader2,
   Pencil,
   Trash2,
+  Timer,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -42,15 +43,21 @@ export function TaskCard({
   task,
   onEdit,
   onDelete,
+  onFocus,
+  onStatusChange,
   onToggleChecklist,
 }: {
   task: Task;
   onEdit: (task: Task) => void;
   onDelete: (task: Task) => void;
+  onFocus: (task: Task) => void;
+  onStatusChange: (task: Task, status: Task["status"]) => Promise<void>;
   onToggleChecklist: (task: Task, itemIndex: number) => Promise<void>;
 }) {
   const [checklistOpen, setChecklistOpen] = useState(false);
   const [updatingItem, setUpdatingItem] = useState<number | null>(null);
+  const [savingStatus, setSavingStatus] = useState(false);
+  const [actionError, setActionError] = useState("");
 
   const done = task.status === "completed";
   const dueDate = getDueDate(task.dueDate);
@@ -72,6 +79,8 @@ export function TaskCard({
 
     try {
       await onToggleChecklist(task, itemIndex);
+    } catch {
+      setActionError("Could not save this checklist change. Please try again.");
     } finally {
       setUpdatingItem(null);
     }
@@ -111,16 +120,52 @@ export function TaskCard({
           </Button>
         </div>
       </div>
+      {!done && (
+        <Button
+          variant="ghost"
+          className="mt-2 self-start px-0"
+          onClick={() => onFocus(task)}
+          aria-label={`Focus on task: ${task.title}`}
+        >
+          <Timer /> Focus
+        </Button>
+      )}
 
       <h3
+        dir="auto"
         id={`task-${task._id}-title`}
         className={cn(
-          "mt-4 text-base font-semibold leading-snug text-foreground",
+          "mt-4 break-words text-base font-semibold leading-snug text-foreground",
           done && "text-muted-foreground line-through decoration-muted-foreground/50",
         )}
       >
         {task.title}
       </h3>
+      <Button
+        variant="outline"
+        className="mt-3 min-h-11 self-start"
+        disabled={savingStatus}
+        onClick={async () => {
+          if (savingStatus) return;
+          setSavingStatus(true);
+          setActionError("");
+          try {
+            await onStatusChange(task, done ? "pending" : "completed");
+          } catch {
+            setActionError("Could not save this change. Please try again.");
+          } finally {
+            setSavingStatus(false);
+          }
+        }}
+      >
+        {savingStatus ? <Loader2 className="animate-spin" /> : <Check />}
+        {done ? "Reopen task" : "Complete task"}
+      </Button>
+      {actionError && (
+        <p role="alert" className="mt-2 text-xs text-destructive">
+          {actionError}
+        </p>
+      )}
 
       <p className="mt-2 line-clamp-3 flex-1 text-sm leading-relaxed text-muted-foreground">
         {task.description || <span className="italic opacity-70">No description</span>}
@@ -129,7 +174,7 @@ export function TaskCard({
       <div className="mt-4 flex flex-wrap items-center gap-2">
         <span
           className={cn(
-            "inline-flex items-center rounded-full px-2.5 py-1",
+            "inline-flex items-center rounded-md px-2 py-1",
             "text-xs font-medium capitalize ring-1 ring-inset",
             PRIORITY_STYLES[task.priority],
           )}
@@ -137,13 +182,13 @@ export function TaskCard({
           {PRIORITY_LABELS[task.priority]} priority
         </span>
 
-        <span className="inline-flex items-center gap-1.5 rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
+        <span className="inline-flex items-center gap-1.5 rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground">
           <Folder className="h-3 w-3" aria-hidden="true" />
           {task.category}
         </span>
 
         {task.reminderEnabled && (
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-violet-50 px-2.5 py-1 text-xs font-medium text-violet-700 ring-1 ring-inset ring-violet-200">
+          <span className="inline-flex items-center gap-1.5 rounded-md bg-violet-50 px-2 py-1 text-xs font-medium text-violet-700 ring-1 ring-inset ring-violet-200">
             <BellRing className="h-3 w-3" aria-hidden="true" />
             {task.reminderType === "daily"
               ? `Daily at ${task.reminderTime}`
@@ -152,7 +197,7 @@ export function TaskCard({
         )}
 
         {overdue && (
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-rose-100 px-2.5 py-1 text-xs font-semibold text-rose-700">
+          <span className="inline-flex items-center gap-1.5 rounded-md bg-rose-100 px-2 py-1 text-xs font-semibold text-rose-700">
             <AlertCircle className="h-3 w-3" aria-hidden="true" />
             Overdue
           </span>
@@ -296,5 +341,12 @@ export function TaskCardSkeleton() {
 }
 
 export function TaskGrid({ children }: { children: React.ReactNode }) {
-  return <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{children}</div>;
+  return (
+    <div
+      className="grid gap-4"
+      style={{ gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 18rem), 1fr))" }}
+    >
+      {children}
+    </div>
+  );
 }

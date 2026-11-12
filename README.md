@@ -1,142 +1,116 @@
-# TaskFlow – Full-Stack Task Manager
+<div align="center">
+  <img src="public/icon-192.png" width="72" height="72" alt="TaskFlow app icon" />
+  <h1>TaskFlow</h1>
+  <p><strong>Know what to do next.</strong></p>
+  <p>A full-stack task manager for choosing a useful next step, focusing on it, and keeping deadlines in view.</p>
+</div>
 
-TaskFlow is a responsive full-stack task management application that helps users organize tasks, deadlines, reminders, and checklists.
+## Product preview
+
+![TaskFlow dashboard showing progress, Next Move, task filters, and demo tasks](docs/screenshots/dashboard-desktop.png)
+
+<p align="center">
+  <img src="docs/screenshots/landing-desktop.png" width="49%" alt="TaskFlow desktop landing page and product preview" />
+  <img src="docs/screenshots/calendar-desktop.png" width="49%" alt="TaskFlow calendar with demo tasks and the selected day's agenda" />
+</p>
+<p align="center">
+  <img src="docs/screenshots/mobile-onboarding.png" width="31%" alt="TaskFlow mobile introduction, step three" />
+  <img src="docs/screenshots/dashboard-mobile.png" width="31%" alt="TaskFlow responsive mobile dashboard with Next Move" />
+  <img src="docs/screenshots/settings-mobile.png" width="31%" alt="TaskFlow mobile settings for focus, sound, and reminders" />
+</p>
+
+## Why TaskFlow
+
+A task list can leave the hardest question unanswered: where to begin. TaskFlow surfaces a **Next Move**, offers a configurable Focus Session, and keeps due dates and reminders visible in a calendar. Its responsive interface supports keyboard use and small screens.
 
 ## Features
 
-- User registration and login using JWT authentication
-- Create, view, edit, and delete tasks
-- Task status, priority, category, and due date
-- Search and advanced task filters
-- Daily and before-deadline reminders
-- Notification center with read/unread status
-- Expandable task checklists with progress tracking
-- Monthly calendar with scheduled and unscheduled tasks
-- Responsive design for desktop, tablet, and mobile
-- REST API documentation using Swagger
+- Account registration and login with JWT authentication and user-scoped tasks.
+- Create, edit, delete, reopen, and undo task completion.
+- Priorities, categories, due dates, checklists, task reminders, search, and filters.
+- Deterministic Next Move recommendations based on task status, priority, and deadlines.
+- 15, 25, 45, or 60-minute Focus Sessions that persist across navigation and refresh.
+- Selectable local completion tones and a visible completion prompt while the app is active.
+- Monthly desktop calendar and a compact mobile agenda.
+- In-app Notifications page with read/unread state.
+- Profile preferences, Light/Dark/System themes, password change, and account deletion.
+- Three-step mobile welcome, Privacy Policy, and Terms of Use.
 
-## Technology Stack
+**Notifications are currently in-app.** Focus completion audio runs while the browser or installed PWA is active enough to execute the app. Browser notifications depend on device/browser permissions. Background Web Push is not implemented; exact delivery after the browser closes is not available.
 
-### Frontend
+## Technology
 
-- React
-- TypeScript
-- TanStack Router
-- TanStack Query
-- Tailwind CSS
-- Radix UI
-- Vite
+React 19, TypeScript, TanStack Start and Router, TanStack Query, Vite, Bun, Tailwind CSS 4, Radix UI, Express 5, MongoDB, Mongoose, JWT, bcrypt, Vitest, Nitro, Vercel Node Functions, and Swagger/OpenAPI.
 
-### Backend
+## Architecture
 
-- Node.js
-- Express
-- MongoDB
-- Mongoose
-- JWT
-- Swagger
+The browser and Express API share an origin. Client calls use relative `/api` paths in local development and production. Express serves the API locally and Nitro packages it as a Node function for Vercel. MongoDB stores accounts and tasks; protected task operations are scoped to the authenticated account. Server secrets are supplied through environment variables and are not part of the client bundle.
 
-## Local Setup
+## Getting started
 
-### 1. Clone the repository
+Prerequisites: Bun, Node.js 22, and a reachable MongoDB database.
 
 ```bash
-git clone <repository-url>
-cd task-manager-fullstack
+bun install
 ```
 
-### 2. Install frontend dependencies
+Copy `backend/.env.example` to `backend/.env` and privately set `MONGODB_URI`, `JWT_SECRET`, and `FRONTEND_URL`. Do not commit that file. No root frontend API URL is needed; requests use same-origin `/api`.
 
-```bash
-npm install
-```
-
-### 3. Configure the frontend environment
-
-Create a `.env` file in the project root:
-
-```env
-VITE_API_URL=http://localhost:3000
-```
-
-### 4. Install backend dependencies
-
-```bash
-cd backend
-npm install
-```
-
-### 5. Configure the backend environment
-
-Copy `backend/.env.example` to `backend/.env` and add your values:
-
-```env
-MONGODB_URI=your_mongodb_connection_string
-JWT_SECRET=your_long_random_secret
-FRONTEND_URL=http://localhost:8080
-PORT=3000
-```
-
-### 6. Run the backend
+In one terminal, start the standalone backend:
 
 ```bash
 cd backend
 npm start
 ```
 
-The API runs at:
-
-```text
-http://localhost:3000
-```
-
-Swagger documentation:
-
-```text
-http://localhost:3000/api-docs
-```
-
-### 7. Run the frontend
-
-Open another terminal in the project root:
+In another terminal at the repository root:
 
 ```bash
-npm run dev
+bun run dev
 ```
 
-The frontend runs at:
+Open `http://localhost:8080`. Vite also prints a Network URL for other devices on the same Wi-Fi. LAN access uses the frontend origin and `/api`; browser requests do not target the phone's localhost. The standalone API listens on port 3000; its Swagger UI is at `/api-docs/` on that server. During Vite development, the API is available under `/api`.
 
-```text
-http://localhost:8080
-```
+## Environment variables
 
-## Quality Checks
+| Variable       | Purpose                                                         |
+| -------------- | --------------------------------------------------------------- |
+| `MONGODB_URI`  | Private MongoDB connection string for the server.               |
+| `JWT_SECRET`   | Long, random server-only JWT signing secret.                    |
+| `FRONTEND_URL` | Frontend origin for configured cross-origin CORS compatibility. |
+| `PORT`         | Optional standalone backend port; defaults to `3000`.           |
 
-```bash
-npm run lint
-npm run test
-npm run build
-```
+Never expose database credentials or `JWT_SECRET` through a `VITE_` variable. `VITE_API_URL` is not used.
 
-Backend checks:
+## Quality checks
 
-```bash
-cd backend
-node --check index.js
-node --check swagger.js
-npm audit
-```
+Verified in this repository:
 
-## Security
+- Frontend: **38 tests passed** across 8 files.
+- Backend: **13 tests passed**.
+- `bunx tsc --noEmit`: passed.
+- `bun run build`: passed.
+- `NITRO_PRESET=vercel bun run build`: passed.
+- `node scripts/verify-vercel.mjs`: passed against the generated Vercel function.
+- `bun run lint`: zero errors; six existing React Fast Refresh warnings.
+- `git diff --check`: passed.
 
-- Passwords are hashed before storage.
-- Protected API routes require a valid JWT.
-- Users can only access their own tasks.
-- Environment variables and secrets are excluded from Git.
+See [QA_REPORT.md](QA_REPORT.md) for browser coverage and [DEPLOYMENT.md](DEPLOYMENT.md) for hosting setup.
+
+## Deployment
+
+Deployment has not been performed. The documented target is Vercel Hobby for a personal, non-commercial portfolio and MongoDB Atlas Free, with a Vercel-provided `vercel.app` hostname. Free plans have usage/resource limits and serverless cold starts. Review [DEPLOYMENT.md](DEPLOYMENT.md) for environment setup and manual checks.
+
+## Current limitations
+
+- No background Web Push or lock-screen delivery.
+- Forgotten-password email recovery needs an external email provider and is unavailable.
+- Focus sound and optional browser notifications depend on browser/device support, permission, network, and platform settings; alerts are not guaranteed after the browser fully closes.
+- Free hosting has usage caps and cold-start latency. No live deployment has been verified.
 
 ## Author
 
 **Manal Bafaraj**
 
-- Portfolio: https://manalbafaraj.github.io/portfolio/
-- GitHub: https://github.com/ManalBafaraj
+- [Portfolio](https://manalbafaraj.github.io/portfolio/)
+- [GitHub](https://github.com/ManalBafaraj)

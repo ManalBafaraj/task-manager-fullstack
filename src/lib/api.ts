@@ -5,8 +5,11 @@
  */
 
 import type { Task, TaskInput } from "./tasks";
+import type { Preferences } from "../../shared/preferences";
 
-export const API_URL = import.meta.env["VITE_API_URL"] ?? "http://localhost:3000";
+// Always use the frontend origin, including on phones opening a LAN URL.
+// A stale VITE_API_URL must never send requests to the phone's own localhost.
+export const API_URL = "/api";
 
 const TOKEN_KEY = "taskflow_token";
 const USER_KEY = "taskflow_user";
@@ -16,6 +19,7 @@ export interface User {
   _id?: string;
   name: string;
   email: string;
+  preferences?: Preferences;
 }
 
 export interface AuthResponse {
@@ -44,6 +48,14 @@ function storage(remember = true): Storage | null {
 }
 
 export const session = {
+  getRawUser(): string | null {
+    if (typeof window === "undefined") return null;
+    try {
+      return localStorage.getItem(USER_KEY) ?? sessionStorage.getItem(USER_KEY);
+    } catch {
+      return null;
+    }
+  },
   getToken(): string | null {
     if (typeof window === "undefined") {
       return null;
@@ -77,6 +89,16 @@ export const session = {
 
     selectedStorage?.setItem(TOKEN_KEY, auth.token);
     selectedStorage?.setItem(USER_KEY, JSON.stringify(auth.user));
+    window.dispatchEvent(new Event("taskflow-session"));
+  },
+
+  updateUser(user: User, token?: string) {
+    const selected = storage(
+      typeof window !== "undefined" && Boolean(localStorage.getItem(TOKEN_KEY)),
+    );
+    selected?.setItem(USER_KEY, JSON.stringify(user));
+    if (token) selected?.setItem(TOKEN_KEY, token);
+    if (typeof window !== "undefined") window.dispatchEvent(new Event("taskflow-session"));
   },
 
   clear() {
@@ -88,6 +110,7 @@ export const session = {
       selectedStorage.removeItem(TOKEN_KEY);
       selectedStorage.removeItem(USER_KEY);
     }
+    window.dispatchEvent(new Event("taskflow-session"));
   },
 };
 
@@ -95,10 +118,13 @@ export const session = {
 
 export async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = session.getToken();
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15000);
 
   try {
     const response = await fetch(`${API_URL}${path}`, {
       ...init,
+      signal: init.signal ?? controller.signal,
       headers: {
         "Content-Type": "application/json",
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -109,6 +135,10 @@ export async function request<T>(path: string, init: RequestInit = {}): Promise<
     const body = await response.json().catch(() => ({}));
 
     if (!response.ok) {
+      if (response.status === 401 && token && session.getToken() === token) {
+        session.clear();
+        window.dispatchEvent(new Event("taskflow-auth-expired"));
+      }
       throw new ApiError(body?.message ?? "Something went wrong.", response.status);
     }
 
@@ -119,6 +149,8 @@ export async function request<T>(path: string, init: RequestInit = {}): Promise<
     }
 
     throw new ApiError("Unable to connect to the server. Please try again.", 503);
+  } finally {
+    clearTimeout(timeout);
   }
 }
 
@@ -147,6 +179,18 @@ export const authApi = {
 /* ---------------- Tasks API ---------------- */
 
 export type MockScenario = "error" | "empty" | undefined;
+export const accountApi = {
+  get: () => request<User>("/auth/me"),
+  update: (input: { name?: string; preferences?: Partial<Preferences> }) =>
+    request<User>("/auth/me", { method: "PATCH", body: JSON.stringify(input) }),
+  password: (input: { currentPassword: string; newPassword: string; confirmPassword: string }) =>
+    request<AuthResponse>("/auth/password", { method: "PATCH", body: JSON.stringify(input) }),
+  remove: (input: { currentPassword: string; confirmation: string }) =>
+    request<{ message: string }>("/auth/account", {
+      method: "DELETE",
+      body: JSON.stringify(input),
+    }),
+};
 
 export const tasksApi = {
   async list(scenario?: MockScenario): Promise<Task[]> {
@@ -168,7 +212,7 @@ export const tasksApi = {
     });
   },
 
-  async update(id: string, input: TaskInput): Promise<Task> {
+  async update(id: string, input: Partial<TaskInput>): Promise<Task> {
     return request<Task>(`/tasks/${id}`, {
       method: "PATCH",
       body: JSON.stringify(input),

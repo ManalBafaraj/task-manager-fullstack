@@ -1,3 +1,4 @@
+import { useAccount } from "@/hooks/use-account";
 import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, Bell, CalendarClock, CheckCheck, Clock3, Repeat2 } from "lucide-react";
 
@@ -185,7 +186,11 @@ export function NotificationCenter({
   userKey: string;
   mode?: "icon" | "sidebar" | undefined;
 }) {
-  const notifications = useMemo(() => buildNotifications(tasks), [tasks]);
+  const { preferences } = useAccount();
+  const notifications = useMemo(
+    () => buildNotifications(preferences.remindersEnabled ? tasks : []),
+    [tasks, preferences.remindersEnabled],
+  );
 
   const storageKey = `taskflow_read_notifications_${userKey}`;
 

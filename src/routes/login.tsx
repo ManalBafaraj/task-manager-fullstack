@@ -5,7 +5,6 @@ import { toast } from "sonner";
 import { AuthLayout } from "@/components/taskflow/AuthLayout";
 import { Field, FormAlert, PasswordInput } from "@/components/taskflow/FormField";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { authApi, session } from "@/lib/api";
 import { validateLogin, type FieldErrors, type LoginInput } from "@/lib/auth-validation";
@@ -102,13 +101,18 @@ function LoginPage() {
         </Field>
 
         <div className="flex items-center gap-2.5">
-          <Checkbox
+          <input
+            type="checkbox"
             id="remember"
+            className="h-5 w-5 shrink-0 cursor-pointer rounded-[5px] accent-primary focus-visible:ring-2 focus-visible:ring-primary/30 max-sm:h-[22px] max-sm:w-[22px]"
             checked={remember}
-            onCheckedChange={(c) => setRemember(c === true)}
+            onChange={(event) => setRemember(event.target.checked)}
             disabled={loading}
           />
-          <label htmlFor="remember" className="cursor-pointer select-none text-sm text-foreground">
+          <label
+            htmlFor="remember"
+            className="flex min-h-11 cursor-pointer items-center select-none text-sm text-foreground sm:min-h-0"
+          >
             Remember me
           </label>
         </div>

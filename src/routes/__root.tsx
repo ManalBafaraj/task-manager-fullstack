@@ -12,6 +12,9 @@ import { type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
 import { Toaster } from "@/components/ui/sonner";
+import { FocusSessionProvider } from "@/components/taskflow/FocusSession";
+import { AccountProvider } from "@/components/taskflow/AccountProvider";
+import { THEME_BOOTSTRAP } from "@/lib/appearance";
 
 function NotFoundComponent() {
   return (
@@ -72,19 +75,20 @@ function ErrorComponent({ error, reset }: ErrorComponentProps) {
 
 export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()({
   head: () => ({
-    // Replace these placeholders with the app's name and description when first building the app.
-    // Each content route, / included, must still set its own head(). Never add og:image or
-    // twitter:image here: every page without its own would inherit the root's preview image.
     meta: [
       { charSet: "utf-8" },
-      { name: "viewport", content: "width=device-width, initial-scale=1" },
+      { name: "viewport", content: "width=device-width, initial-scale=1, viewport-fit=cover" },
       { title: "TaskFlow — Personal task manager" },
       {
         name: "description",
         content: "TaskFlow helps you capture, organize and finish your personal tasks.",
       },
       { name: "author", content: "TaskFlow" },
-      { name: "theme-color", content: "#6C5CE7" },
+      { name: "theme-color", content: "#f7f6f2" },
+      { name: "application-name", content: "TaskFlow" },
+      { name: "apple-mobile-web-app-title", content: "TaskFlow" },
+      { name: "apple-mobile-web-app-capable", content: "yes" },
+      { name: "apple-mobile-web-app-status-bar-style", content: "default" },
       { property: "og:title", content: "TaskFlow — Personal task manager" },
       {
         property: "og:description",
@@ -99,6 +103,9 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         href: appCss,
       },
       { rel: "icon", href: "/favicon.ico", type: "image/x-icon" },
+      { rel: "icon", href: "/favicon.svg", type: "image/svg+xml" },
+      { rel: "apple-touch-icon", href: "/apple-touch-icon.png", sizes: "180x180" },
+      { rel: "manifest", href: "/site.webmanifest" },
       { rel: "preconnect", href: "https://fonts.googleapis.com" },
       { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
       {
@@ -115,8 +122,9 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 
 function RootShell({ children }: { children: ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_BOOTSTRAP }} />
         <HeadContent />
       </head>
       <body>
@@ -133,7 +141,11 @@ function RootComponent() {
   return (
     <QueryClientProvider client={queryClient}>
       {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
-      <Outlet />
+      <AccountProvider>
+        <FocusSessionProvider>
+          <Outlet />
+        </FocusSessionProvider>
+      </AccountProvider>
       <Toaster />
     </QueryClientProvider>
   );

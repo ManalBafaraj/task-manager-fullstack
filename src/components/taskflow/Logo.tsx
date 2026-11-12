@@ -1,26 +1,33 @@
 import { cn } from "@/lib/utils";
 
-export function LogoMark({ className }: { className?: string }) {
+export function LogoMark({
+  className,
+  inverted = false,
+}: {
+  className?: string | undefined;
+  inverted?: boolean | undefined;
+}) {
   return (
     <span
       className={cn(
-        "grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-gradient-primary text-primary-foreground shadow-glow",
+        "grid h-10 w-10 shrink-0 place-items-center rounded-xl",
+        inverted ? "bg-white/15 text-white" : "bg-primary text-primary-foreground",
         className,
       )}
       aria-hidden="true"
     >
-      <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none">
+      <svg viewBox="0 0 64 64" className="h-9 w-9" fill="none">
         <path
-          d="M4 7.5h9M4 12h6M4 16.5h4"
+          d="M14 19L34 19M14 29L28 29M14 39L22 39"
           stroke="currentColor"
-          strokeWidth="2.2"
+          strokeWidth="4.5"
           strokeLinecap="round"
-          opacity=".55"
+          opacity=".65"
         />
         <path
-          d="m12.5 14.5 2.6 2.6L20.5 11"
+          d="M29 39L36 46L50 23M41 23L50 23L50 32"
           stroke="currentColor"
-          strokeWidth="2.4"
+          strokeWidth="4.5"
           strokeLinecap="round"
           strokeLinejoin="round"
         />
@@ -29,18 +36,31 @@ export function LogoMark({ className }: { className?: string }) {
   );
 }
 
-export function Logo({ className, inverted }: { className?: string; inverted?: boolean }) {
+export function Logo({
+  className,
+  inverted = false,
+  iconOnly = false,
+}: {
+  className?: string | undefined;
+  inverted?: boolean | undefined;
+  iconOnly?: boolean | undefined;
+}) {
   return (
-    <span className={cn("inline-flex items-center gap-2.5", className)}>
-      <LogoMark className={inverted ? "bg-primary-foreground/15 shadow-none" : undefined} />
-      <span
-        className={cn(
-          "text-xl font-bold tracking-tight",
-          inverted ? "text-primary-foreground" : "text-foreground",
-        )}
-      >
-        Task<span className={inverted ? "opacity-80" : "text-primary"}>Flow</span>
-      </span>
+    <span
+      className={cn("inline-flex items-center gap-2.5", className)}
+      aria-label={iconOnly ? "TaskFlow" : undefined}
+    >
+      <LogoMark inverted={inverted} />
+      {!iconOnly && (
+        <span
+          className={cn(
+            "text-xl font-semibold tracking-[-0.045em]",
+            inverted ? "text-primary-foreground" : "text-foreground",
+          )}
+        >
+          Task<span className={inverted ? "opacity-80" : "text-primary"}>Flow</span>
+        </span>
+      )}
     </span>
   );
 }

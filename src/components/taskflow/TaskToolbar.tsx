@@ -1,6 +1,13 @@
 import { RotateCcw, Search, SlidersHorizontal, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   FILTER_OPTIONS,
   TASK_CATEGORIES,
   TASK_PRIORITIES,
@@ -29,8 +36,58 @@ interface TaskToolbarProps {
   disabled?: boolean | undefined;
 }
 
-const selectClassName =
-  "h-10 min-w-[135px] cursor-pointer rounded-xl border border-input bg-card px-3 text-sm text-foreground shadow-soft outline-none transition-colors focus:border-primary focus:ring-4 focus:ring-primary/10 disabled:cursor-not-allowed disabled:opacity-50";
+function FilterSelect<T extends string>({
+  value,
+  onValueChange,
+  label,
+  options,
+  disabled = false,
+}: {
+  value: T;
+  onValueChange: (value: T) => void;
+  label: string;
+  options: readonly { value: T; label: string }[];
+  disabled?: boolean | undefined;
+}) {
+  return (
+    <Select value={value} onValueChange={(next) => onValueChange(next as T)} disabled={disabled}>
+      <SelectTrigger
+        aria-label={label}
+        className="h-11 w-auto min-w-[148px] max-w-full rounded-xl px-3.5 text-sm"
+      >
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent position="popper" align="start" sideOffset={6}>
+        {options.map((option) => (
+          <SelectItem key={option.value} value={option.value}>
+            {option.label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
+const priorityOptions = [
+  { value: "all", label: "All priorities" },
+  ...TASK_PRIORITIES.map((value) => ({
+    value,
+    label: value.charAt(0).toUpperCase() + value.slice(1),
+  })),
+] as const;
+
+const categoryOptions = [
+  { value: "all", label: "All categories" },
+  ...TASK_CATEGORIES.map((value) => ({ value, label: value })),
+] as const;
+
+const dueDateOptions = [
+  { value: "all", label: "Any due date" },
+  { value: "overdue", label: "Overdue" },
+  { value: "today", label: "Due today" },
+  { value: "upcoming", label: "Upcoming" },
+  { value: "no-date", label: "No due date" },
+] as const;
 
 export function TaskToolbar({
   query,
@@ -54,18 +111,16 @@ export function TaskToolbar({
     dueDate !== "all";
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div className="relative w-full lg:max-w-sm">
           <label htmlFor="task-search" className="sr-only">
             Search tasks
           </label>
-
           <Search
             className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
             aria-hidden="true"
           />
-
           <Input
             id="task-search"
             type="search"
@@ -75,7 +130,6 @@ export function TaskToolbar({
             disabled={disabled}
             className="pl-11 pr-11 [&::-webkit-search-cancel-button]:hidden"
           />
-
           {query && (
             <button
               type="button"
@@ -91,23 +145,41 @@ export function TaskToolbar({
         <div
           role="radiogroup"
           aria-label="Filter by status"
-          className="-mx-4 flex gap-1.5 overflow-x-auto px-4 pb-1 lg:mx-0 lg:rounded-xl lg:border lg:bg-card lg:p-1 lg:shadow-soft"
+          onKeyDown={(event) => {
+            if (disabled) return;
+            const index = FILTER_OPTIONS.findIndex((option) => option.value === status);
+            let nextIndex: number;
+            if (event.key === "ArrowRight" || event.key === "ArrowDown")
+              nextIndex = (index + 1) % FILTER_OPTIONS.length;
+            else if (event.key === "ArrowLeft" || event.key === "ArrowUp")
+              nextIndex = (index + FILTER_OPTIONS.length - 1) % FILTER_OPTIONS.length;
+            else if (event.key === "Home") nextIndex = 0;
+            else if (event.key === "End") nextIndex = FILTER_OPTIONS.length - 1;
+            else return;
+            event.preventDefault();
+            const next = FILTER_OPTIONS[nextIndex];
+            if (next) onStatusChange(next.value);
+            event.currentTarget
+              .querySelectorAll<HTMLButtonElement>('[role="radio"]')
+              [nextIndex]?.focus();
+          }}
+          className="flex flex-wrap gap-1.5 pb-1 lg:rounded-xl lg:border lg:bg-card lg:p-1"
         >
           {FILTER_OPTIONS.map((option) => {
             const active = status === option.value;
-
             return (
               <button
                 key={option.value}
                 type="button"
                 role="radio"
                 aria-checked={active}
+                tabIndex={active ? 0 : -1}
                 disabled={disabled}
                 onClick={() => onStatusChange(option.value)}
                 className={cn(
-                  "h-10 shrink-0 cursor-pointer rounded-lg px-4 text-sm font-medium transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50",
+                  "h-10 shrink-0 cursor-pointer rounded-lg px-4 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50",
                   active
-                    ? "bg-primary text-primary-foreground shadow-glow"
+                    ? "bg-primary text-primary-foreground"
                     : "border bg-card text-muted-foreground hover:bg-accent hover:text-accent-foreground lg:border-transparent lg:bg-transparent",
                 )}
               >
@@ -118,71 +190,38 @@ export function TaskToolbar({
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="mr-1 flex items-center gap-2 text-sm font-medium text-muted-foreground">
+      <div className="flex flex-wrap items-center gap-2.5">
+        <div className="mr-1 flex h-11 items-center gap-2 text-sm font-medium text-muted-foreground">
           <SlidersHorizontal className="h-4 w-4" />
           Filters
         </div>
-
-        <label className="sr-only" htmlFor="priority-filter">
-          Filter by priority
-        </label>
-        <select
-          id="priority-filter"
+        <FilterSelect
           value={priority}
+          onValueChange={onPriorityChange}
+          label="Filter by priority"
+          options={priorityOptions}
           disabled={disabled}
-          onChange={(event) => onPriorityChange(event.target.value as PriorityFilter)}
-          className={selectClassName}
-        >
-          <option value="all">All priorities</option>
-          {TASK_PRIORITIES.map((item) => (
-            <option key={item} value={item}>
-              {item.charAt(0).toUpperCase() + item.slice(1)}
-            </option>
-          ))}
-        </select>
-
-        <label className="sr-only" htmlFor="category-filter">
-          Filter by category
-        </label>
-        <select
-          id="category-filter"
+        />
+        <FilterSelect
           value={category}
+          onValueChange={onCategoryChange}
+          label="Filter by category"
+          options={categoryOptions}
           disabled={disabled}
-          onChange={(event) => onCategoryChange(event.target.value as CategoryFilter)}
-          className={selectClassName}
-        >
-          <option value="all">All categories</option>
-          {TASK_CATEGORIES.map((item) => (
-            <option key={item} value={item}>
-              {item}
-            </option>
-          ))}
-        </select>
-
-        <label className="sr-only" htmlFor="due-date-filter">
-          Filter by due date
-        </label>
-        <select
-          id="due-date-filter"
+        />
+        <FilterSelect
           value={dueDate}
+          onValueChange={onDueDateChange}
+          label="Filter by due date"
+          options={dueDateOptions}
           disabled={disabled}
-          onChange={(event) => onDueDateChange(event.target.value as DueDateFilter)}
-          className={selectClassName}
-        >
-          <option value="all">Any due date</option>
-          <option value="overdue">Overdue</option>
-          <option value="today">Due today</option>
-          <option value="upcoming">Upcoming</option>
-          <option value="no-date">No due date</option>
-        </select>
-
+        />
         {hasFilters && (
           <button
             type="button"
             onClick={onClear}
             disabled={disabled}
-            className="inline-flex h-10 items-center gap-2 rounded-xl px-3 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-50"
+            className="inline-flex h-11 items-center gap-2 rounded-xl px-3 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:opacity-50"
           >
             <RotateCcw className="h-4 w-4" />
             Reset

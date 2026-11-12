@@ -1,4 +1,4 @@
-const swaggerJsdoc = require("swagger-jsdoc");
+import swaggerJsdoc from "swagger-jsdoc";
 
 const swaggerOptions = {
   definition: {
@@ -11,14 +11,8 @@ const swaggerOptions = {
     },
 
     servers: [
-      {
-        url: "https://task-api-wgp7.onrender.com",
-        description: "Production server",
-      },
-      {
-        url: "http://localhost:3000",
-        description: "Local development server",
-      },
+      { url: "/api", description: "Same-origin frontend API" },
+      { url: "/", description: "Standalone Express server" },
     ],
 
     components: {
@@ -383,4 +377,41 @@ const swaggerOptions = {
 
 const swaggerSpec = swaggerJsdoc(swaggerOptions);
 
-module.exports = swaggerSpec;
+const protectedOperation = (summary, method) => ({
+  summary,
+  security: [{ bearerAuth: [] }],
+  ...(method === "get"
+    ? {}
+    : {
+        requestBody: {
+          required: true,
+          content: { "application/json": { schema: { type: "object" } } },
+        },
+      }),
+  responses: {
+    200: { description: "Success" },
+    400: { description: "Invalid details" },
+    401: { description: "Authentication required" },
+  },
+});
+swaggerSpec.paths["/auth/me"] = {
+  get: protectedOperation("Read your profile and preferences", "get"),
+  patch: protectedOperation(
+    "Update your name or preferences (focusMinutes, completionSound, browserNotifications, remindersEnabled, defaultReminderTime, appearance)",
+    "patch",
+  ),
+};
+swaggerSpec.paths["/auth/password"] = {
+  patch: protectedOperation(
+    "Change password: currentPassword, newPassword, confirmPassword; returns replacement token and invalidates other sessions",
+    "patch",
+  ),
+};
+swaggerSpec.paths["/auth/account"] = {
+  delete: protectedOperation(
+    "Permanently delete your account and tasks transactionally: currentPassword and confirmation DELETE",
+    "delete",
+  ),
+};
+
+export default swaggerSpec;

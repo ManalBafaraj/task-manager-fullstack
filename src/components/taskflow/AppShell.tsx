@@ -1,12 +1,16 @@
-import { useState, type ReactNode } from "react";
-import { Link } from "@tanstack/react-router";
-import { Bell, CalendarDays, LayoutDashboard, LogOut, Menu } from "lucide-react";
+import { useAccount } from "@/hooks/use-account";
+import { useEffect, useState, type ReactNode } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { Link, useNavigate } from "@tanstack/react-router";
+import { Bell, CalendarDays, LayoutDashboard, LogOut, Menu, Settings2 } from "lucide-react";
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
-import type { User } from "@/lib/api";
+import { session, type User } from "@/lib/api";
 import type { Task } from "@/lib/tasks";
 import { Logo } from "./Logo";
 import { NotificationCenter } from "./NotificationCenter";
+import { useFocusSession } from "@/hooks/use-focus-session";
+import { cn } from "@/lib/utils";
 
 function initials(name?: string) {
   if (!name) return "TF";
@@ -77,6 +81,15 @@ function NavContent({
           <Bell className="h-[18px] w-[18px]" aria-hidden="true" />
           Notifications
         </Link>
+        <Link
+          to="/settings"
+          onClick={onNavigate}
+          className="mt-1 flex h-11 items-center gap-3 rounded-xl px-3 text-sm font-medium text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+          activeProps={{ className: "bg-accent text-accent-foreground", "aria-current": "page" }}
+        >
+          <Settings2 className="h-[18px] w-[18px]" aria-hidden="true" />
+          Settings
+        </Link>
       </nav>
 
       <div className="space-y-2 border-t p-4">
@@ -113,7 +126,7 @@ function NavContent({
 }
 
 export function AppShell({
-  user,
+  user: fallbackUser,
   tasks = [],
   onLogout,
   children,
@@ -123,7 +136,20 @@ export function AppShell({
   onLogout: () => void;
   children: ReactNode;
 }) {
+  const { user: accountUser } = useAccount();
+  const user = accountUser ?? fallbackUser;
   const [open, setOpen] = useState(false);
+  const { active } = useFocusSession();
+  const navigate = useNavigate();
+  // beforeLoad protects client navigation; this also covers an SSR page's hydration.
+  useEffect(() => {
+    if (!session.getToken()) void navigate({ to: "/login", replace: true });
+  }, [navigate]);
+  const queryClient = useQueryClient();
+  const logout = () => {
+    queryClient.clear();
+    onLogout();
+  };
 
   return (
     <div className="min-h-dvh">
@@ -135,10 +161,10 @@ export function AppShell({
       </a>
 
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 border-r bg-sidebar lg:block">
-        <NavContent user={user} tasks={tasks} onLogout={onLogout} />
+        <NavContent user={user} tasks={tasks} onLogout={logout} />
       </aside>
 
-      <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b bg-card/85 px-4 backdrop-blur-md lg:hidden">
+      <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b bg-card px-4 lg:hidden">
         <Logo />
 
         <div className="flex items-center gap-2">
@@ -168,14 +194,14 @@ export function AppShell({
             onNavigate={() => setOpen(false)}
             onLogout={() => {
               setOpen(false);
-              onLogout();
+              logout();
             }}
           />
         </SheetContent>
       </Sheet>
 
-      <main id="main" className="lg:pl-64">
-        <div className="mx-auto w-full max-w-[1180px] px-4 py-6 sm:px-6 lg:px-10 lg:py-10">
+      <main id="main" className={cn("lg:pl-64", active && "focus-session-layout lg:pr-[300px]")}>
+        <div className="@container mx-auto w-full max-w-[1280px] px-4 py-6 sm:px-6 lg:px-10 lg:py-10">
           {children}
         </div>
       </main>

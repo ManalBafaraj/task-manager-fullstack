@@ -38,3 +38,6 @@ dist-ssr
 .env
 .env.*
 !.env.example
+# Local deployment and visual QA output
+.vercel
+.qa

@@ -1,3 +1,5 @@
+import { useAccount } from "@/hooks/use-account";
+import { requireSession } from "@/lib/auth-guard";
 import { useEffect, useMemo, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
@@ -14,6 +16,7 @@ import { authApi, session, tasksApi, type User } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/notifications")({
+  beforeLoad: requireSession,
   head: () => ({
     meta: [
       {
@@ -72,12 +75,17 @@ function NotificationsPage() {
   const tasksQuery = useQuery({
     queryKey: ["tasks"],
     queryFn: () => tasksApi.list(),
+    enabled: Boolean(user),
     retry: false,
   });
 
   const tasks = useMemo(() => tasksQuery.data ?? [], [tasksQuery.data]);
 
-  const notifications = useMemo(() => buildNotifications(tasks), [tasks]);
+  const { preferences } = useAccount();
+  const notifications = useMemo(
+    () => buildNotifications(preferences.remindersEnabled ? tasks : []),
+    [tasks, preferences.remindersEnabled],
+  );
 
   const storageKey = `taskflow_read_notifications_${user?.email ?? "guest"}`;
 
@@ -130,7 +138,7 @@ function NotificationsPage() {
     authApi.logout();
 
     navigate({
-      to: "/login",
+      to: "/",
     });
   };
 

@@ -1,275 +1,235 @@
-import { useEffect, useMemo, useState } from "react";
+import { useTaskActions } from "@/hooks/use-task-actions";
+import { requireSession } from "@/lib/auth-guard";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
-import {
-  addMonths,
-  eachDayOfInterval,
-  endOfMonth,
-  endOfWeek,
-  format,
-  isSameDay,
-  isSameMonth,
-  startOfMonth,
-  startOfWeek,
-  subMonths,
-} from "date-fns";
-import { CalendarDays, ChevronLeft, ChevronRight, Clock3, Folder, ListTodo } from "lucide-react";
-import { toast } from "sonner";
-
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { format, isSameMonth, startOfMonth } from "date-fns";
+import { CalendarDays, ChevronLeft, ChevronRight, Plus } from "lucide-react";
 import { AppShell } from "@/components/taskflow/AppShell";
+import { TaskFormDialog } from "@/components/taskflow/TaskFormDialog";
+import { ErrorState } from "@/components/taskflow/TaskStates";
+import { StatusBadge } from "@/components/taskflow/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { authApi, session, tasksApi, type User } from "@/lib/api";
-import type { Task, TaskPriority, TaskStatus } from "@/lib/tasks";
+import { dateKey, groupTasksByDate, monthDays, moveCalendar, weekDays } from "@/lib/planning";
+import {
+  TASK_CATEGORIES,
+  TASK_PRIORITIES,
+  TASK_STATUSES,
+  STATUS_LABELS,
+  type Task,
+  type TaskInput,
+} from "@/lib/tasks";
 import { cn } from "@/lib/utils";
 
-type CalendarStatusFilter = "all" | TaskStatus;
-type CalendarPriorityFilter = "all" | TaskPriority;
-
-const STATUS_OPTIONS: {
-  value: CalendarStatusFilter;
-  label: string;
-}[] = [
-  { value: "all", label: "All statuses" },
-  { value: "pending", label: "Pending" },
-  { value: "in-progress", label: "In Progress" },
-  { value: "completed", label: "Completed" },
-];
-
-const PRIORITY_OPTIONS: {
-  value: CalendarPriorityFilter;
-  label: string;
-}[] = [
-  { value: "all", label: "All priorities" },
-  { value: "low", label: "Low priority" },
-  { value: "medium", label: "Medium priority" },
-  { value: "high", label: "High priority" },
-];
-
-const STATUS_STYLES: Record<TaskStatus, string> = {
-  pending: "bg-amber-100 text-amber-700",
-  "in-progress": "bg-blue-100 text-blue-700",
-  completed: "bg-emerald-100 text-emerald-700",
-};
-
-const STATUS_DOT_STYLES: Record<TaskStatus, string> = {
-  pending: "bg-amber-500",
-  "in-progress": "bg-blue-500",
-  completed: "bg-emerald-500",
-};
-
-const PRIORITY_STYLES: Record<TaskPriority, string> = {
-  low: "text-emerald-700",
-  medium: "text-amber-700",
-  high: "text-rose-700",
-};
-
 export const Route = createFileRoute("/calendar")({
+  beforeLoad: requireSession,
   head: () => ({
     meta: [
-      {
-        title: "Calendar - TaskFlow",
-      },
-      {
-        name: "description",
-        content: "View and organize your tasks by due date.",
-      },
-      {
-        name: "robots",
-        content: "noindex",
-      },
+      { title: "Calendar - TaskFlow" },
+      { name: "description", content: "Make room for your day with the TaskFlow agenda." },
+      { name: "robots", content: "noindex" },
     ],
   }),
   component: CalendarPage,
 });
 
-function parseDueDate(value: string | null) {
-  if (!value) return null;
-
-  const date = value.includes("T") ? new Date(value) : new Date(`${value}T00:00:00`);
-
-  return Number.isNaN(date.getTime()) ? null : date;
-}
-
-function taskDateKey(task: Task) {
-  const date = parseDueDate(task.dueDate);
-
-  return date ? format(date, "yyyy-MM-dd") : null;
-}
-
 function CalendarPage() {
   const navigate = useNavigate();
-
+  const updateTask = useTaskActions();
+  const queryClient = useQueryClient();
   const [user, setUser] = useState<User | null>(null);
-  const [currentMonth, setCurrentMonth] = useState(startOfMonth(new Date()));
-  const [selectedDate, setSelectedDate] = useState(new Date());
-
-  const [status, setStatus] = useState<CalendarStatusFilter>("all");
-  const [priority, setPriority] = useState<CalendarPriorityFilter>("all");
+  const [selected, setSelected] = useState(new Date());
+  const [month, setMonth] = useState(startOfMonth(new Date()));
+  const [monthOpen, setMonthOpen] = useState(false);
+  const [status, setStatus] = useState("all");
+  const [priority, setPriority] = useState("all");
   const [category, setCategory] = useState("all");
-
-  useEffect(() => {
-    setUser(session.getUser());
-  }, []);
-
-  const tasksQuery = useQuery({
+  const [editing, setEditing] = useState<Task | null>(null);
+  const [formOpen, setFormOpen] = useState(false);
+  const touchStart = useRef<number | null>(null);
+  useEffect(() => setUser(session.getUser()), []);
+  const query = useQuery({
     queryKey: ["tasks"],
     queryFn: () => tasksApi.list(),
+    enabled: Boolean(user),
     retry: false,
   });
-
-  const tasks = useMemo(() => tasksQuery.data ?? [], [tasksQuery.data]);
-
-  const categories = useMemo(() => {
-    return Array.from(
-      new Set(tasks.map((task) => task.category).filter((value) => Boolean(value))),
-    ).sort((first, second) => first.localeCompare(second));
-  }, [tasks]);
-
-  const filteredTasks = useMemo(() => {
-    return tasks.filter((task) => {
-      const matchesStatus = status === "all" || task.status === status;
-
-      const matchesPriority = priority === "all" || task.priority === priority;
-
-      const matchesCategory = category === "all" || task.category === category;
-
-      return matchesStatus && matchesPriority && matchesCategory;
-    });
-  }, [tasks, status, priority, category]);
-
-  const calendarDays = useMemo(() => {
-    const firstDay = startOfWeek(startOfMonth(currentMonth));
-    const lastDay = endOfWeek(endOfMonth(currentMonth));
-
-    return eachDayOfInterval({
-      start: firstDay,
-      end: lastDay,
-    });
-  }, [currentMonth]);
-
-  const tasksByDate = useMemo(() => {
-    const map = new Map<string, Task[]>();
-
-    filteredTasks.forEach((task) => {
-      const key = taskDateKey(task);
-
-      if (!key) return;
-
-      const existing = map.get(key) ?? [];
-
-      map.set(key, [...existing, task]);
-    });
-
-    return map;
-  }, [filteredTasks]);
-
-  const selectedTasks = useMemo(() => {
-    const key = format(selectedDate, "yyyy-MM-dd");
-
-    return tasksByDate.get(key) ?? [];
-  }, [tasksByDate, selectedDate]);
-
-  const unscheduledTasks = useMemo(() => {
-    return filteredTasks.filter((task) => taskDateKey(task) === null);
-  }, [filteredTasks]);
-
-  const goToPreviousMonth = () => {
-    const previousMonth = subMonths(currentMonth, 1);
-
-    setCurrentMonth(previousMonth);
-    setSelectedDate(startOfMonth(previousMonth));
+  const tasks = useMemo(() => query.data ?? [], [query.data]);
+  const filtered = useMemo(
+    () =>
+      tasks.filter(
+        (t) =>
+          (status === "all" || t.status === status) &&
+          (priority === "all" || t.priority === priority) &&
+          (category === "all" || t.category === category),
+      ),
+    [tasks, status, priority, category],
+  );
+  const grouped = useMemo(() => groupTasksByDate(filtered), [filtered]);
+  const selectedTasks = [...(grouped.get(dateKey(selected)) ?? [])].sort((a, b) =>
+    (a.reminderEnabled ? a.reminderTime : "99").localeCompare(
+      b.reminderEnabled ? b.reminderTime : "99",
+    ),
+  );
+  const choose = (date: Date) => {
+    setSelected(date);
+    setMonth(startOfMonth(date));
   };
-
-  const goToNextMonth = () => {
-    const nextMonth = addMonths(currentMonth, 1);
-
-    setCurrentMonth(nextMonth);
-    setSelectedDate(startOfMonth(nextMonth));
+  const shift = (amount: number, view: "week" | "month") => {
+    const next = moveCalendar(view === "week" ? selected : month, amount, view);
+    choose(next);
   };
-
-  const goToToday = () => {
-    const today = new Date();
-
-    setCurrentMonth(startOfMonth(today));
-    setSelectedDate(today);
+  const addTask = () => {
+    setEditing(null);
+    setFormOpen(true);
   };
-
-  const handleLogout = () => {
-    authApi.logout();
-
-    toast.success("You have been logged out");
-
-    navigate({
-      to: "/login",
-    });
+  const edit = (task: Task) => {
+    setEditing(task);
+    setFormOpen(true);
   };
-
-  return (
-    <AppShell user={user} tasks={tasks} onLogout={handleLogout}>
-      <header className="flex flex-col gap-2">
-        <div className="flex items-center gap-3">
-          <span className="grid h-12 w-12 place-items-center rounded-2xl bg-primary-soft text-primary">
-            <CalendarDays className="h-5 w-5" />
+  const submit = async (input: TaskInput) => {
+    const saved = editing ? await updateTask(editing, input) : await tasksApi.create(input);
+    queryClient.setQueryData<Task[]>(["tasks"], (previous) =>
+      editing
+        ? (previous ?? []).map((t) => (t._id === saved._id ? saved : t))
+        : [saved, ...(previous ?? [])],
+    );
+  };
+  const filters = [
+    {
+      label: "Status",
+      value: status,
+      change: setStatus,
+      options: TASK_STATUSES.map((value) => ({ value, label: STATUS_LABELS[value] })),
+    },
+    {
+      label: "Priority",
+      value: priority,
+      change: setPriority,
+      options: TASK_PRIORITIES.map((value) => ({
+        value,
+        label: `${value[0]?.toUpperCase()}${value.slice(1)} priority`,
+      })),
+    },
+    {
+      label: "Category",
+      value: category,
+      change: setCategory,
+      options: TASK_CATEGORIES.map((value) => ({ value, label: value })),
+    },
+  ];
+  const compactMonth = (
+    <div>
+      <div className="mb-2 flex items-center justify-between">
+        <Button
+          variant="ghost"
+          size="icon"
+          aria-label="Previous month"
+          onClick={() => setMonth(moveCalendar(month, -1, "month"))}
+        >
+          <ChevronLeft />
+        </Button>
+        <span dir="auto" className="text-sm font-semibold">
+          {format(month, "MMMM yyyy")}
+        </span>
+        <Button
+          variant="ghost"
+          size="icon"
+          aria-label="Next month"
+          onClick={() => setMonth(moveCalendar(month, 1, "month"))}
+        >
+          <ChevronRight />
+        </Button>
+      </div>
+      <div className="grid grid-cols-7 text-center text-xs">
+        {["S", "M", "T", "W", "T", "F", "S"].map((d, i) => (
+          <span key={i} className="py-2 text-muted-foreground">
+            {d}
           </span>
-
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight text-foreground sm:text-[32px]">
-              Calendar
-            </h1>
-
-            <p className="mt-1 text-sm text-muted-foreground">
-              Plan your tasks and keep track of deadlines.
-            </p>
-          </div>
+        ))}
+        {monthDays(month).map((day) => (
+          <button
+            type="button"
+            key={dateKey(day)}
+            aria-label={format(day, "MMMM d, yyyy")}
+            aria-pressed={dateKey(day) === dateKey(selected)}
+            className={cn(
+              "min-h-11 rounded-lg text-sm",
+              !isSameMonth(day, month) && "text-muted-foreground",
+              dateKey(day) === dateKey(selected) && "bg-primary text-white",
+            )}
+            onClick={() => {
+              choose(day);
+              setMonthOpen(false);
+            }}
+          >
+            {format(day, "d")}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+  return (
+    <AppShell
+      user={user}
+      tasks={tasks}
+      onLogout={() => {
+        authApi.logout();
+        void navigate({ to: "/" });
+      }}
+    >
+      <header className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <p className="eyebrow">A LITTLE STRUCTURE, MORE SPACE</p>
+          <h1 className="mt-2 text-3xl font-semibold tracking-tight">Your calendar</h1>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Deadlines in view. A day you can work with.
+          </p>
         </div>
+        <Button onClick={addTask}>
+          <Plus /> Add task
+        </Button>
       </header>
-
-      <div className="mt-7 flex flex-col gap-3 rounded-2xl border bg-card p-4 shadow-soft sm:flex-row sm:flex-wrap sm:items-center">
-        <select
-          value={status}
-          onChange={(event) => setStatus(event.target.value as CalendarStatusFilter)}
-          className="h-11 rounded-xl border border-input bg-background px-3 text-sm outline-none focus:border-primary focus:ring-4 focus:ring-primary/10"
-          aria-label="Filter calendar by status"
-        >
-          {STATUS_OPTIONS.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-
-        <select
-          value={priority}
-          onChange={(event) => setPriority(event.target.value as CalendarPriorityFilter)}
-          className="h-11 rounded-xl border border-input bg-background px-3 text-sm outline-none focus:border-primary focus:ring-4 focus:ring-primary/10"
-          aria-label="Filter calendar by priority"
-        >
-          {PRIORITY_OPTIONS.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-
-        <select
-          value={category}
-          onChange={(event) => setCategory(event.target.value)}
-          className="h-11 rounded-xl border border-input bg-background px-3 text-sm outline-none focus:border-primary focus:ring-4 focus:ring-primary/10"
-          aria-label="Filter calendar by category"
-        >
-          <option value="all">All categories</option>
-
-          {categories.map((item) => (
-            <option key={item} value={item}>
-              {item}
-            </option>
-          ))}
-        </select>
-
+      <div className="my-5 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
+        {filters.map((f, index) => (
+          <div key={f.label} className={index === 2 ? "col-span-2 min-w-0" : "min-w-0"}>
+            <Select value={f.value} onValueChange={f.change}>
+              <SelectTrigger
+                aria-label={`Filter by ${f.label.toLowerCase()}`}
+                className="h-11 w-full min-w-0 sm:w-auto sm:min-w-[130px]"
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent position="popper">
+                <SelectItem value="all">
+                  All{" "}
+                  {f.label.toLowerCase() === "status"
+                    ? "statuses"
+                    : f.label.toLowerCase() === "category"
+                      ? "categories"
+                      : "priorities"}
+                </SelectItem>
+                {f.options.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>
+                    {o.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        ))}
         {(status !== "all" || priority !== "all" || category !== "all") && (
           <Button
-            type="button"
             variant="ghost"
             onClick={() => {
               setStatus("all");
@@ -277,298 +237,297 @@ function CalendarPage() {
               setCategory("all");
             }}
           >
-            Clear filters
+            Reset
           </Button>
         )}
       </div>
-
-      {tasksQuery.isPending ? (
-        <div className="mt-6 grid gap-5 xl:grid-cols-[minmax(0,1fr)_340px]">
-          <Skeleton className="h-[620px] rounded-3xl" />
-          <Skeleton className="h-[360px] rounded-3xl" />
+      {query.isPending ? (
+        <div role="status" aria-label="Loading calendar">
+          <Skeleton className="h-64 w-full rounded-xl" />
         </div>
-      ) : tasksQuery.isError ? (
-        <div className="mt-6 rounded-3xl border bg-card px-6 py-16 text-center shadow-soft">
-          <p className="font-semibold text-foreground">Could not load your calendar</p>
-
-          <p className="mt-2 text-sm text-muted-foreground">
-            Please check the connection and try again.
-          </p>
-
-          <Button className="mt-5" onClick={() => tasksQuery.refetch()}>
-            Try again
-          </Button>
-        </div>
+      ) : query.isError ? (
+        <ErrorState onRetry={() => void query.refetch()} retrying={query.isFetching} />
       ) : (
         <>
-          <div className="mt-6 grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_340px]">
-            <section
-              className="overflow-hidden rounded-3xl border bg-card shadow-soft"
-              aria-label="Monthly calendar"
-            >
-              <div className="flex flex-col gap-4 border-b px-4 py-5 sm:flex-row sm:items-center sm:justify-between sm:px-6">
-                <div>
-                  <h2 className="text-xl font-bold text-foreground">
-                    {format(currentMonth, "MMMM yyyy")}
-                  </h2>
-
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Select a day to view its tasks.
-                  </p>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <Button type="button" variant="outline" size="sm" onClick={goToToday}>
-                    Today
-                  </Button>
-
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon-sm"
-                    onClick={goToPreviousMonth}
-                    aria-label="Previous month"
-                  >
-                    <ChevronLeft />
-                  </Button>
-
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon-sm"
-                    onClick={goToNextMonth}
-                    aria-label="Next month"
-                  >
-                    <ChevronRight />
-                  </Button>
-                </div>
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-lg font-semibold">{format(month, "MMMM yyyy")}</h2>
+            <div className="flex items-center gap-1">
+              <Button variant="outline" onClick={() => choose(new Date())}>
+                Today
+              </Button>
+              <div className="hidden md:flex">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label="Previous month"
+                  onClick={() => shift(-1, "month")}
+                >
+                  <ChevronLeft />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label="Next month"
+                  onClick={() => shift(1, "month")}
+                >
+                  <ChevronRight />
+                </Button>
               </div>
-
-              <div className="grid grid-cols-7 border-b bg-muted/40">
-                {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
-                  <div
-                    key={day}
-                    className="px-1 py-3 text-center text-[10px] font-semibold uppercase tracking-wide text-muted-foreground sm:text-xs"
+              <div className="md:hidden">
+                <Popover open={monthOpen} onOpenChange={setMonthOpen}>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline">
+                      <CalendarDays /> Month
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent
+                    collisionPadding={12}
+                    className="w-[min(22rem,calc(100vw-1.5rem))] p-2"
                   >
-                    {day}
-                  </div>
+                    {compactMonth}
+                  </PopoverContent>
+                </Popover>
+              </div>
+            </div>
+          </div>
+          <div className="calendar-layout grid items-start gap-6">
+            <section
+              aria-label="Month calendar"
+              className="hidden min-w-0 overflow-hidden rounded-xl border bg-card md:block"
+            >
+              <div className="grid grid-cols-7 border-b">
+                {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (
+                  <p key={d} className="py-3 text-center text-xs font-medium text-muted-foreground">
+                    {d}
+                  </p>
                 ))}
               </div>
-
               <div className="grid grid-cols-7">
-                {calendarDays.map((day) => {
-                  const key = format(day, "yyyy-MM-dd");
-                  const dayTasks = tasksByDate.get(key) ?? [];
-                  const selected = isSameDay(day, selectedDate);
-                  const today = isSameDay(day, new Date());
-                  const current = isSameMonth(day, currentMonth);
-
+                {monthDays(month).map((day) => {
+                  const key = dateKey(day);
+                  const entries = grouped.get(key) ?? [];
+                  return (
+                    <div
+                      key={key}
+                      className={cn(
+                        "min-h-[112px] min-w-0 border-b border-r p-1.5",
+                        !isSameMonth(day, month) && "bg-muted/40",
+                        key === dateKey(selected) && "bg-primary-soft/50",
+                      )}
+                    >
+                      <button
+                        type="button"
+                        aria-label={`Select ${format(day, "MMMM d, yyyy")}`}
+                        aria-pressed={key === dateKey(selected)}
+                        onClick={() => choose(day)}
+                        className={cn(
+                          "mb-1 grid h-11 w-11 place-items-center rounded-lg text-xs",
+                          key === dateKey(new Date()) &&
+                            "font-bold text-primary-dark ring-1 ring-inset ring-primary",
+                          key === dateKey(selected) && "bg-primary text-white ring-0",
+                        )}
+                      >
+                        {format(day, "d")}
+                      </button>
+                      {entries.slice(0, 2).map((t) => (
+                        <button
+                          key={t._id}
+                          type="button"
+                          onClick={() => edit(t)}
+                          className={cn(
+                            "mb-1 block min-h-7 w-full truncate rounded border-l-2 px-1.5 py-1 text-left text-[11px]",
+                            t.status === "completed"
+                              ? "border-completed-strong bg-completed-soft text-completed-strong"
+                              : t.priority === "high"
+                                ? "border-rose-600 bg-rose-50 text-rose-800"
+                                : t.status === "in-progress"
+                                  ? "border-progress-strong bg-progress-soft text-progress-strong"
+                                  : "border-pending-strong bg-pending-soft text-pending-strong",
+                          )}
+                          title={`${t.title} - ${STATUS_LABELS[t.status]} - ${t.priority} priority`}
+                        >
+                          {t.title}
+                        </button>
+                      ))}
+                      {entries.length > 2 && (
+                        <button
+                          type="button"
+                          onClick={() => choose(day)}
+                          className="min-h-8 px-1 text-xs text-muted-foreground"
+                        >
+                          +{entries.length - 2} more
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+            <section
+              aria-label="Week calendar"
+              className="md:hidden"
+              onTouchStart={(e) => {
+                touchStart.current = e.touches[0]?.clientX ?? null;
+              }}
+              onTouchEnd={(e) => {
+                const end = e.changedTouches[0]?.clientX;
+                if (
+                  touchStart.current !== null &&
+                  end !== undefined &&
+                  Math.abs(end - touchStart.current) > 50
+                )
+                  shift(end < touchStart.current ? 1 : -1, "week");
+                touchStart.current = null;
+              }}
+            >
+              <div className="mb-2 flex items-center justify-between">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label="Previous week"
+                  onClick={() => shift(-1, "week")}
+                >
+                  <ChevronLeft />
+                </Button>
+                <p className="text-xs text-muted-foreground">
+                  Week of {format(weekDays(selected)[0]!, "MMM d")}
+                </p>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label="Next week"
+                  onClick={() => shift(1, "week")}
+                >
+                  <ChevronRight />
+                </Button>
+              </div>
+              <div className="grid grid-cols-7 gap-1">
+                {weekDays(selected).map((day) => {
+                  const key = dateKey(day);
                   return (
                     <button
-                      key={key}
                       type="button"
-                      onClick={() => {
-                        setSelectedDate(day);
-
-                        if (!isSameMonth(day, currentMonth)) {
-                          setCurrentMonth(startOfMonth(day));
-                        }
-                      }}
+                      key={key}
+                      aria-label={format(day, "EEEE, MMMM d")}
+                      aria-pressed={key === dateKey(selected)}
+                      onClick={() => choose(day)}
                       className={cn(
-                        "relative min-h-[76px] border-b border-r p-2 text-left transition-colors",
-                        "sm:min-h-[112px] sm:p-3",
-                        "hover:bg-accent/60",
-                        !current && "bg-muted/25 text-muted-foreground opacity-60",
-                        selected && "z-10 bg-primary-soft ring-2 ring-inset ring-primary",
+                        "min-h-[76px] min-w-0 rounded-xl py-2 text-center",
+                        key === dateKey(selected) ? "bg-primary text-white" : "bg-card",
+                        key === dateKey(new Date()) &&
+                          key !== dateKey(selected) &&
+                          "ring-1 ring-inset ring-primary",
                       )}
-                      aria-label={`${format(day, "MMMM d, yyyy")}, ${dayTasks.length} tasks`}
                     >
-                      <div className="flex items-center justify-between gap-1">
-                        <span
-                          className={cn(
-                            "grid h-7 w-7 place-items-center rounded-full text-xs font-semibold",
-                            today && "bg-primary text-primary-foreground",
-                            selected && !today && "text-primary",
-                          )}
-                        >
-                          {format(day, "d")}
-                        </span>
-
-                        {dayTasks.length > 0 && (
-                          <span className="text-[10px] font-semibold text-primary sm:text-xs">
-                            {dayTasks.length}
-                          </span>
-                        )}
-                      </div>
-
-                      <div className="mt-2 hidden space-y-1 sm:block">
-                        {dayTasks.slice(0, 2).map((task) => (
-                          <div
-                            key={task._id}
-                            className="flex items-center gap-1.5 rounded-md bg-muted/70 px-1.5 py-1"
-                          >
-                            <span
-                              className={cn(
-                                "h-1.5 w-1.5 shrink-0 rounded-full",
-                                STATUS_DOT_STYLES[task.status],
-                              )}
-                            />
-
-                            <span className="truncate text-[10px] font-medium text-foreground">
-                              {task.title}
-                            </span>
-                          </div>
-                        ))}
-
-                        {dayTasks.length > 2 && (
-                          <p className="px-1 text-[10px] text-muted-foreground">
-                            +{dayTasks.length - 2} more
-                          </p>
-                        )}
-                      </div>
-
-                      <div className="mt-2 flex flex-wrap gap-1 sm:hidden">
-                        {dayTasks.slice(0, 3).map((task) => (
-                          <span
-                            key={task._id}
-                            className={cn(
-                              "h-1.5 w-1.5 rounded-full",
-                              STATUS_DOT_STYLES[task.status],
-                            )}
-                          />
-                        ))}
-                      </div>
+                      <span className="block text-[10px]">{format(day, "EEEEE")}</span>
+                      <span className="my-1 block text-lg font-medium">{format(day, "d")}</span>
+                      <span className="block text-[10px]">
+                        {grouped.get(key)?.length ?? 0} tasks
+                      </span>
                     </button>
                   );
                 })}
               </div>
             </section>
-
-            <aside className="rounded-3xl border bg-card p-5 shadow-soft xl:sticky xl:top-6">
-              <div className="flex items-start justify-between gap-3">
+            <section aria-labelledby="agenda-heading" className="min-w-0">
+              <div className="mb-4 flex items-center justify-between border-b pb-4">
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-primary">
-                    Selected day
-                  </p>
-
-                  <h2 className="mt-1 text-lg font-bold text-foreground">
-                    {format(selectedDate, "EEEE, MMMM d")}
+                  <p className="eyebrow">THE DAY AHEAD</p>
+                  <h2 id="agenda-heading" className="mt-1 text-lg font-semibold">
+                    {format(selected, "EEE, MMM d")}
                   </h2>
                 </div>
-
-                <span className="rounded-full bg-primary-soft px-2.5 py-1 text-xs font-semibold text-primary">
-                  {selectedTasks.length}
-                </span>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label="Add task on selected date"
+                  onClick={addTask}
+                >
+                  <Plus />
+                </Button>
               </div>
-
-              {selectedTasks.length === 0 ? (
-                <div className="py-14 text-center">
-                  <span className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-muted text-muted-foreground">
-                    <CalendarDays className="h-5 w-5" />
-                  </span>
-
-                  <p className="mt-4 text-sm font-semibold text-foreground">No tasks on this day</p>
-
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Select another date to view its tasks.
-                  </p>
-                </div>
-              ) : (
-                <div className="mt-5 space-y-3">
-                  {selectedTasks.map((task) => (
-                    <div key={task._id} className="rounded-2xl border bg-background p-4">
-                      <div className="flex items-center justify-between gap-3">
-                        <span
-                          className={cn(
-                            "rounded-full px-2 py-1 text-[10px] font-semibold",
-                            STATUS_STYLES[task.status],
-                          )}
-                        >
-                          {task.status === "in-progress"
-                            ? "In Progress"
-                            : task.status === "pending"
-                              ? "Pending"
-                              : "Completed"}
-                        </span>
-
-                        <span
-                          className={cn(
-                            "text-xs font-semibold capitalize",
-                            PRIORITY_STYLES[task.priority],
-                          )}
-                        >
-                          {task.priority}
-                        </span>
+              {selectedTasks.length ? (
+                <div className="space-y-1">
+                  {selectedTasks.map((t) => (
+                    <button
+                      type="button"
+                      key={t._id}
+                      onClick={() => edit(t)}
+                      className="flex w-full gap-3 rounded-lg py-4 pr-2 text-left hover:bg-muted"
+                    >
+                      <div className="w-14 shrink-0 border-r pr-2 text-xs tabular-nums text-muted-foreground">
+                        {t.reminderEnabled ? (
+                          <>
+                            <span className="block">
+                              {format(new Date(`2000-01-01T${t.reminderTime}`), "h:mm a")}
+                            </span>
+                            <span className="mt-1 block text-[10px]">Reminder</span>
+                          </>
+                        ) : (
+                          "Any time"
+                        )}
                       </div>
-
-                      <h3 className="mt-3 text-sm font-semibold text-foreground">{task.title}</h3>
-
-                      {task.description && (
-                        <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-muted-foreground">
-                          {task.description}
+                      <div className="min-w-0 flex-1">
+                        <p className="break-words text-sm font-semibold">{t.title}</p>
+                        <p className="mt-1 text-xs capitalize text-muted-foreground">
+                          {t.priority} priority · {t.category}
                         </p>
-                      )}
-
-                      <div className="mt-3 flex items-center gap-1.5 text-xs text-muted-foreground">
-                        <Folder className="h-3.5 w-3.5" />
-                        {task.category}
+                        <div className="mt-2">
+                          <StatusBadge status={t.status} />
+                        </div>
+                        {t.checklist.length > 0 && (
+                          <p className="mt-2 text-xs text-muted-foreground">
+                            {t.checklist.filter((i) => i.completed).length}/{t.checklist.length}{" "}
+                            steps complete
+                          </p>
+                        )}
                       </div>
-                    </div>
+                    </button>
                   ))}
                 </div>
+              ) : (
+                <div className="border-l-2 py-6 pl-4">
+                  <p className="font-medium">A little breathing room.</p>
+                  <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+                    No tasks scheduled for this date.
+                  </p>
+                  <Button variant="outline" className="mt-4" onClick={addTask}>
+                    <Plus /> Plan something
+                  </Button>
+                </div>
               )}
-            </aside>
+            </section>
           </div>
-
-          <section className="mt-8 rounded-3xl border bg-card p-5 shadow-soft sm:p-6">
-            <div className="flex items-center gap-3">
-              <span className="grid h-10 w-10 place-items-center rounded-xl bg-muted text-muted-foreground">
-                <Clock3 className="h-4 w-4" />
-              </span>
-
-              <div>
-                <h2 className="font-bold text-foreground">Unscheduled tasks</h2>
-
-                <p className="text-xs text-muted-foreground">
-                  Tasks that do not have a due date yet.
-                </p>
+          {filtered.some((t) => !t.dueDate) && (
+            <section className="mt-8 border-t pt-5">
+              <h2 dir="auto" className="text-sm font-semibold">
+                Not scheduled yet
+              </h2>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {filtered
+                  .filter((t) => !t.dueDate)
+                  .map((t) => (
+                    <Button
+                      key={t._id}
+                      variant="outline"
+                      className="max-w-full"
+                      onClick={() => edit(t)}
+                    >
+                      <span className="truncate">{t.title}</span>
+                    </Button>
+                  ))}
               </div>
-
-              <span className="ml-auto rounded-full bg-muted px-2.5 py-1 text-xs font-semibold text-muted-foreground">
-                {unscheduledTasks.length}
-              </span>
-            </div>
-
-            {unscheduledTasks.length === 0 ? (
-              <p className="mt-5 rounded-2xl border border-dashed px-4 py-8 text-center text-sm text-muted-foreground">
-                All filtered tasks have a due date.
-              </p>
-            ) : (
-              <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                {unscheduledTasks.map((task) => (
-                  <div key={task._id} className="rounded-2xl border bg-background p-4">
-                    <div className="flex items-start gap-3">
-                      <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-primary-soft text-primary">
-                        <ListTodo className="h-4 w-4" />
-                      </span>
-
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-semibold text-foreground">
-                          {task.title}
-                        </p>
-
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          {task.category} · {task.priority} priority
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </section>
+            </section>
+          )}
         </>
       )}
+      <TaskFormDialog
+        open={formOpen}
+        onOpenChange={setFormOpen}
+        task={editing}
+        initialDueDate={dateKey(selected)}
+        onSubmit={submit}
+      />
     </AppShell>
   );
 }

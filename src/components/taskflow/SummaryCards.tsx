@@ -1,32 +1,4 @@
-import type { LucideIcon } from "lucide-react";
-import { CheckCircle2, Clock3, ListTodo, Loader } from "lucide-react";
-import { cva } from "class-variance-authority";
 import { Skeleton } from "@/components/ui/skeleton";
-
-const iconWrap = cva("grid h-11 w-11 place-items-center rounded-xl", {
-  variants: {
-    tone: {
-      all: "bg-primary-soft text-primary",
-      pending: "bg-pending-soft text-pending-strong",
-      progress: "bg-progress-soft text-progress-strong",
-      completed: "bg-completed-soft text-completed-strong",
-    },
-  },
-});
-
-type Tone = "all" | "pending" | "progress" | "completed";
-
-const CARDS: {
-  key: "all" | "pending" | "in-progress" | "completed";
-  label: string;
-  icon: LucideIcon;
-  tone: Tone;
-}[] = [
-  { key: "all", label: "All Tasks", icon: ListTodo, tone: "all" },
-  { key: "pending", label: "Pending", icon: Clock3, tone: "pending" },
-  { key: "in-progress", label: "In Progress", icon: Loader, tone: "progress" },
-  { key: "completed", label: "Completed", icon: CheckCircle2, tone: "completed" },
-];
 
 export function SummaryCards({
   counts,
@@ -35,25 +7,59 @@ export function SummaryCards({
   counts?: Record<"all" | "pending" | "in-progress" | "completed", number>;
   loading?: boolean;
 }) {
+  if (loading || !counts)
+    return (
+      <section aria-label="Loading progress" className="border-y py-5">
+        <Skeleton className="h-5 w-48" />
+        <Skeleton className="mt-3 h-2 w-full" />
+      </section>
+    );
+  const progress = counts.all ? Math.round((counts.completed / counts.all) * 100) : 0;
   return (
-    <section aria-label="Task summary" className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
-      {CARDS.map(({ key, label, icon: Icon, tone }) => (
-        <div key={key} className="card-surface card-lift p-4 sm:p-5">
-          <div className="flex items-start justify-between gap-2">
-            <p className="text-sm font-medium text-muted-foreground">{label}</p>
-            <span className={iconWrap({ tone })} aria-hidden="true">
-              <Icon className="h-5 w-5" />
-            </span>
-          </div>
-          {loading || !counts ? (
-            <Skeleton className="mt-3 h-9 w-14 rounded-lg" />
-          ) : (
-            <p className="mt-2 text-3xl font-bold tracking-tight text-foreground sm:text-[34px]">
-              {counts[key]}
-            </p>
-          )}
+    <section
+      aria-label="Today's progress"
+      className="grid gap-4 border-y py-5 sm:grid-cols-[1fr_auto] sm:items-center"
+    >
+      <div>
+        <p className="eyebrow">
+          TODAY'S PROGRESS{" "}
+          <span className="ml-2 font-normal normal-case tracking-normal">
+            Across your task list
+          </span>
+        </p>
+        <p className="mt-2 text-lg font-semibold">
+          {counts.all
+            ? `${counts.completed} of ${counts.all} tasks completed`
+            : "A clear page. A fresh start."}
+        </p>
+        <div
+          role="progressbar"
+          aria-label="Tasks completed"
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={progress}
+          className="mt-3 h-1.5 overflow-hidden rounded-full bg-muted"
+        >
+          <div
+            className="h-full rounded-full bg-completed-strong"
+            style={{ width: `${progress}%` }}
+          />
         </div>
-      ))}
+      </div>
+      <dl className="flex flex-wrap gap-y-3 text-xs sm:ml-6">
+        <div className="pr-4">
+          <dt className="text-pending-strong">Pending</dt>
+          <dd className="mt-1 text-lg font-medium text-foreground">{counts.pending}</dd>
+        </div>
+        <div className="border-l px-4">
+          <dt className="text-progress-strong">In progress</dt>
+          <dd className="mt-1 text-lg font-medium text-foreground">{counts["in-progress"]}</dd>
+        </div>
+        <div className="border-l pl-4">
+          <dt className="text-completed-strong">Completed</dt>
+          <dd className="mt-1 text-lg font-medium text-foreground">{counts.completed}</dd>
+        </div>
+      </dl>
     </section>
   );
 }

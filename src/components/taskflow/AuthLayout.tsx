@@ -1,32 +1,8 @@
+import { LegalLinks } from "./LegalLinks";
 import type { ReactNode } from "react";
-import { CheckCircle2, Circle, Loader } from "lucide-react";
+import { Link } from "@tanstack/react-router";
+import { ArrowUpRight, Check } from "lucide-react";
 import { Logo } from "./Logo";
-
-function PreviewRow({
-  icon,
-  title,
-  meta,
-  done,
-}: {
-  icon: ReactNode;
-  title: string;
-  meta: string;
-  done?: boolean;
-}) {
-  return (
-    <div className="flex items-center gap-3 rounded-xl bg-primary-foreground/10 px-4 py-3 backdrop-blur-sm">
-      {icon}
-      <div className="min-w-0 flex-1">
-        <p
-          className={`truncate text-sm font-medium text-primary-foreground ${done ? "line-through opacity-70" : ""}`}
-        >
-          {title}
-        </p>
-        <p className="text-xs text-primary-foreground/65">{meta}</p>
-      </div>
-    </div>
-  );
-}
 
 export function AuthLayout({
   title,
@@ -40,55 +16,45 @@ export function AuthLayout({
   footer: ReactNode;
 }) {
   return (
-    <div className="grid min-h-dvh lg:grid-cols-[1.05fr_1fr]">
-      {/* Brand panel (desktop) */}
-      <aside className="relative hidden overflow-hidden bg-gradient-auth p-12 lg:flex lg:flex-col">
-        <div className="pointer-events-none absolute inset-0 auth-grid" aria-hidden="true" />
-        <Logo inverted className="relative" />
-
-        <div className="relative my-auto max-w-md">
-          <h2 className="text-4xl font-bold leading-tight tracking-tight text-primary-foreground">
-            Calm, focused task management for your everyday.
+    <div className="min-h-dvh">
+      <header className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3 sm:px-8 sm:py-6">
+        <Link to="/" aria-label="TaskFlow home">
+          <Logo />
+        </Link>
+        <Link
+          to="/"
+          className="flex min-h-11 shrink-0 items-center gap-1 text-xs text-muted-foreground sm:text-sm"
+        >
+          Back to home <ArrowUpRight className="h-4 w-4" />
+        </Link>
+      </header>
+      <main className="mx-auto grid max-w-5xl gap-12 px-4 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-3 sm:px-8 sm:py-8 lg:grid-cols-2 lg:gap-24 lg:py-16">
+        <aside className="hidden py-8 lg:block">
+          <p className="eyebrow">A LITTLE CLARITY GOES A LONG WAY</p>
+          <h2 className="mt-6 text-5xl font-semibold leading-[1.1] tracking-tight">
+            Less on your mind.
+            <br />
+            More in motion.
           </h2>
-          <p className="mt-4 text-base leading-relaxed text-primary-foreground/75">
-            Capture what matters, track progress and enjoy the satisfaction of checking things off.
+          <p className="mt-5 max-w-sm text-base leading-relaxed text-muted-foreground">
+            A clear next step, a little focus, and room for everything else.
           </p>
-
-          <div className="mt-10 space-y-3 rounded-2xl border border-primary-foreground/15 bg-primary-foreground/5 p-4 shadow-lift">
-            <PreviewRow
-              icon={<CheckCircle2 className="h-5 w-5 shrink-0 text-completed" />}
-              title="Read “Deep Work” — chapter 4"
-              meta="Completed"
-              done
-            />
-            <PreviewRow
-              icon={<Loader className="h-5 w-5 shrink-0 text-primary-foreground" />}
-              title="Finalize portfolio case study"
-              meta="In progress"
-            />
-            <PreviewRow
-              icon={<Circle className="h-5 w-5 shrink-0 text-pending" />}
-              title="Book dentist appointment"
-              meta="Pending"
-            />
+          <div className="mt-10 border-y py-5">
+            <p className="eyebrow text-primary-dark">YOUR NEXT MOVE</p>
+            <p className="mt-4 text-lg font-semibold">Make a little space for your day.</p>
+            <div className="mt-4 flex items-center gap-2 text-sm text-muted-foreground">
+              <Check className="h-4 w-4 text-completed-strong" /> One thing at a time is enough.
+            </div>
           </div>
-        </div>
-
-        <p className="relative text-sm text-primary-foreground/60">
-          © {new Date().getFullYear()} TaskFlow
-        </p>
-      </aside>
-
-      {/* Form panel */}
-      <main className="flex items-center justify-center px-5 py-10 sm:px-8">
-        <div className="w-full max-w-[420px] animate-fade-up">
-          <Logo className="mb-10 lg:hidden" />
-          <h1 className="text-[28px] font-bold leading-tight tracking-tight text-foreground sm:text-3xl">
-            {title}
-          </h1>
-          <p className="mt-2 text-[15px] text-muted-foreground">{subtitle}</p>
-          <div className="mt-8">{children}</div>
-          <p className="mt-8 text-center text-sm text-muted-foreground">{footer}</p>
+        </aside>
+        <div className="w-full max-w-[420px] justify-self-center rounded-2xl border bg-card p-5 sm:p-8">
+          <h1 className="text-[26px] font-semibold tracking-tight sm:text-3xl">{title}</h1>
+          <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{subtitle}</p>
+          <div className="mt-7">{children}</div>
+          <p className="mt-7 text-center text-sm text-muted-foreground">{footer}</p>
+          <div className="mt-4 flex justify-center">
+            <LegalLinks />
+          </div>
         </div>
       </main>
     </div>
