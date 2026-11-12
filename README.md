@@ -5,6 +5,8 @@
   <p>A full-stack task manager for choosing a useful next step, focusing on it, and keeping deadlines in view.</p>
 </div>
 
+<p align="center"><a href="https://task-manager-fullstack-topaz.vercel.app"><strong>Open the TaskFlow Live Demo →</strong></a></p>
+
 ## Product preview
 
 ![TaskFlow dashboard showing progress, Next Move, task filters, and demo tasks](docs/screenshots/dashboard-desktop.png)
@@ -99,14 +101,15 @@ See [QA_REPORT.md](QA_REPORT.md) for browser coverage and [DEPLOYMENT.md](DEPLOY
 
 ## Deployment
 
-Deployment has not been performed. The documented target is Vercel Hobby for a personal, non-commercial portfolio and MongoDB Atlas Free, with a Vercel-provided `vercel.app` hostname. Free plans have usage/resource limits and serverless cold starts. Review [DEPLOYMENT.md](DEPLOYMENT.md) for environment setup and manual checks.
+TaskFlow is deployed to Vercel Hobby and verified at [task-manager-fullstack-topaz.vercel.app](https://task-manager-fullstack-topaz.vercel.app). The production app runs on Node.js 22 and uses MongoDB Atlas Free with a separate `taskflow-production` database. Production checks covered the public pages, API health, OpenAPI and Swagger, protected task access, icons, and disposable account/task workflows; the QA account and its data were deleted afterward. Free tiers have usage and resource limits and serverless cold starts. See [DEPLOYMENT.md](DEPLOYMENT.md) for configuration and operating guidance.
 
 ## Current limitations
 
 - No background Web Push or lock-screen delivery.
 - Forgotten-password email recovery needs an external email provider and is unavailable.
 - Focus sound and optional browser notifications depend on browser/device support, permission, network, and platform settings; alerts are not guaranteed after the browser fully closes.
-- Free hosting has usage caps and cold-start latency. No live deployment has been verified.
+- A real physical iPhone Safari sound check remains for the owner.
+- Free hosting has usage caps and cold-start latency.
 
 ## Author
 
